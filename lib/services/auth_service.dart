@@ -26,6 +26,24 @@ class AuthService {
   }
 
   // Sign up
+  // Future<UserCredential> signUpWithEmailPassword(
+  //   String email,
+  //   String password,
+  // ) async {
+  //   try {
+  //     UserCredential userCredential = await _auth
+  //         .createUserWithEmailAndPassword(email: email, password: password);
+  //     // Save user info in a separate document
+  //     await _firestore.collection('users').doc(userCredential.user!.uid).set({
+  //       'uid': userCredential.user!.uid,
+  //       'email': email,
+  //       'photoURL': null, // Initially no photo
+  //     });
+  //     return userCredential;
+  //   } on FirebaseAuthException catch (e) {
+  //     throw Exception(e.code);
+  //   }
+  // }
   Future<UserCredential> signUpWithEmailPassword(
     String email,
     String password,
@@ -37,7 +55,10 @@ class AuthService {
       await _firestore.collection('users').doc(userCredential.user!.uid).set({
         'uid': userCredential.user!.uid,
         'email': email,
-        'photoURL': null, // Initially no photo
+        'photoURL': null,
+        // Add these new fields for new users
+        'status': 'Online', // Set to Online initially
+        'lastSeen': Timestamp.now(),
       });
       return userCredential;
     } on FirebaseAuthException catch (e) {

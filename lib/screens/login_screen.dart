@@ -1,4 +1,7 @@
+import 'package:dynamichatapp/screens/phone_auth_screen.dart';
+import 'package:dynamichatapp/screens/signup_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:page_transition/page_transition.dart';
 import '../services/auth_service.dart';
 import '../widgets/custom_textfield.dart';
 
@@ -291,6 +294,33 @@ class _LoginScreenState extends State<LoginScreen>
                                         ),
                                 ),
                               ),
+                              const SizedBox(height: 16),
+                              Text(
+                                "OR",
+                                style: TextStyle(color: Colors.grey[600]),
+                              ),
+                              const SizedBox(height: 16),
+                              SizedBox(
+                                width: double.infinity,
+                                height: 56,
+                                child: OutlinedButton.icon(
+                                  icon: const Icon(Icons.phone),
+                                  label: const Text('Sign in with Phone'),
+                                  onPressed: () {
+                                    Navigator.push(
+                                      context,
+                                      PageTransition(
+                                        type: PageTransitionType
+                                            .rightToLeftWithFade,
+                                        child: const PhoneAuthScreen(),
+                                      ),
+                                    );
+                                  },
+                                  style: OutlinedButton.styleFrom(
+                                    // style to match your app
+                                  ),
+                                ),
+                              ),
                             ],
                           ),
                         ),
@@ -305,13 +335,21 @@ class _LoginScreenState extends State<LoginScreen>
                           border: Border.all(color: Colors.grey[300]!),
                         ),
                         child: TextButton(
-                          onPressed: _isLoading
-                              ? null
-                              : () {
-                                  setState(() {
-                                    _isLogin = !_isLogin;
-                                  });
-                                },
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const SignUpScreen(),
+                              ),
+                            );
+                          },
+                          // _isLoading
+                          //     ? null
+                          //     : () {
+                          //         setState(() {
+                          //           _isLogin = !_isLogin;
+                          //         });
+                          //       },
                           style: TextButton.styleFrom(
                             foregroundColor: Theme.of(context).primaryColor,
                             padding: const EdgeInsets.symmetric(
@@ -326,16 +364,18 @@ class _LoginScreenState extends State<LoginScreen>
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(
-                                _isLogin
-                                    ? Icons.person_add_outlined
-                                    : Icons.login_outlined,
+                                // _isLogin
+                                //?
+                                Icons.person_add_outlined,
+                                // : Icons.login_outlined,
                                 size: 20,
                               ),
                               const SizedBox(width: 8),
                               Text(
-                                _isLogin
-                                    ? 'New here? Create account'
-                                    : 'Already have account? Sign in',
+                                // _isLogin
+                                // ?
+                                'New here? Create account',
+                                // : 'Already have account? Sign in',
                                 style: const TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w600,

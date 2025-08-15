@@ -11,21 +11,6 @@ class AuthService {
     return _auth.currentUser;
   }
 
-  // // Sign in
-  // Future<UserCredential> signInWithEmailPassword(
-  //   String email,
-  //   String password,
-  // ) async {
-  //   try {
-  //     return await _auth.signInWithEmailAndPassword(
-  //       email: email,
-  //       password: password,
-  //     );
-  //   } on FirebaseAuthException catch (e) {
-  //     throw Exception(e.code);
-  //   }
-  // }
-  // Sign in
   Future<UserCredential> signInWithEmailPassword(
     String email,
     String password,
@@ -36,6 +21,92 @@ class AuthService {
         password: password,
       );
       // Associate user with OneSignal
+      OneSignal.login(userCredential.user!.uid);
+      return userCredential;
+    } on FirebaseAuthException catch (e) {
+      throw Exception(e.code);
+    }
+  }
+
+  Future<void> verifyPhoneNumber({
+    required String phoneNumber,
+    required void Function(PhoneAuthCredential) verificationCompleted,
+    required void Function(FirebaseAuthException) verificationFailed,
+    required void Function(String, int?) codeSent,
+    required void Function(String) codeAutoRetrievalTimeout,
+  }) async {
+    await _auth.verifyPhoneNumber(
+      phoneNumber: phoneNumber,
+      verificationCompleted: verificationCompleted,
+      verificationFailed: verificationFailed,
+      codeSent: codeSent,
+      codeAutoRetrievalTimeout: codeAutoRetrievalTimeout,
+    );
+  }
+
+  Future<UserCredential> signUpAndLinkPhone({
+    required String email,
+    required String password,
+    required PhoneAuthCredential credential,
+  }) async {
+    try {
+      // Step 1: Create the user with email and password
+      UserCredential userCredential = await _auth
+          .createUserWithEmailAndPassword(email: email, password: password);
+
+      // Step 2: Link the verified phone number to the new account
+      await userCredential.user!.linkWithCredential(credential);
+
+      // Step 3: Save user info to Firestore
+      await _firestore.collection('users').doc(userCredential.user!.uid).set({
+        'uid': userCredential.user!.uid,
+        'email': email,
+        'phoneNumber': credential.smsCode != null
+            ? null
+            : userCredential.user!.phoneNumber, // Store phone number
+        'photoURL': null,
+        'status': 'Online',
+        'lastSeen': Timestamp.now(),
+      });
+
+      // Step 4: Associate with OneSignal
+      OneSignal.login(userCredential.user!.uid);
+
+      return userCredential;
+    } on FirebaseAuthException catch (e) {
+      // Handle errors like 'email-already-in-use'
+      throw Exception(e.message);
+    }
+  }
+
+  Future<UserCredential> signInWithPhoneCredential(
+    PhoneAuthCredential credential,
+  ) async {
+    try {
+      final userCredential = await _auth.signInWithCredential(credential);
+      OneSignal.login(userCredential.user!.uid);
+      return userCredential;
+    } on FirebaseAuthException catch (e) {
+      throw Exception(e.code);
+    }
+  }
+
+  Future<UserCredential> signInWithCredential(AuthCredential credential) async {
+    try {
+      final userCredential = await _auth.signInWithCredential(credential);
+
+      // Check if user is new
+      if (userCredential.additionalUserInfo?.isNewUser ?? false) {
+        // Save new user info to Firestore
+        await _firestore.collection('users').doc(userCredential.user!.uid).set({
+          'uid': userCredential.user!.uid,
+          'email': userCredential.user!.phoneNumber, // Or prompt for an email
+          'photoURL': null,
+          'status': 'Online',
+          'lastSeen': Timestamp.now(),
+        });
+      }
+      // Associate with OneSignal
       OneSignal.login(userCredential.user!.uid);
       return userCredential;
     } on FirebaseAuthException catch (e) {

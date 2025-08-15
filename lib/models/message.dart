@@ -6,6 +6,8 @@ class Message {
   final String receiverId;
   final String message;
   final Timestamp timestamp;
+  final String? imageUrl;
+  final String type;
 
   Message({
     required this.senderId,
@@ -13,6 +15,8 @@ class Message {
     required this.receiverId,
     required this.message,
     required this.timestamp,
+    this.imageUrl,
+    required this.type,
   });
 
   Map<String, dynamic> toMap() {
@@ -22,6 +26,20 @@ class Message {
       'receiverId': receiverId,
       'message': message,
       'timestamp': timestamp,
+      'imageUrl': imageUrl,
+      'type': type,
     };
+  }
+
+  factory Message.fromMap(Map<String, dynamic> map) {
+    return Message(
+      senderId: map['senderId'],
+      senderEmail: map['senderEmail'],
+      receiverId: map['receiverId'],
+      message: map['message'],
+      timestamp: map['timestamp'],
+      imageUrl: map['imageUrl'],
+      type: map['type'] ?? 'text',
+    );
   }
 }

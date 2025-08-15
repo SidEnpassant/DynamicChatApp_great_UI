@@ -101,4 +101,23 @@ class StorageService {
       return null;
     }
   }
+
+  Future<String?> uploadChatImage(XFile image, String chatRoomId) async {
+    try {
+      // Create a unique filename for each image
+      final fileName = DateTime.now().millisecondsSinceEpoch.toString();
+      final ref = _storage
+          .ref()
+          .child('chat_images')
+          .child(chatRoomId)
+          .child('$fileName.jpg');
+
+      await ref.putFile(File(image.path));
+      final url = await ref.getDownloadURL();
+      return url;
+    } catch (e) {
+      print('Error uploading chat image: $e');
+      return null;
+    }
+  }
 }

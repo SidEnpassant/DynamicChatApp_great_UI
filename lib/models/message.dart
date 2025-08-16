@@ -10,6 +10,12 @@ class Message {
   final String type;
   final Map<String, List<String>> reactions;
 
+  final bool isReply;
+  final String? replyingToMessage;
+  final String? replyingToSender;
+
+  final String? audioUrl;
+
   Message({
     required this.senderId,
     required this.senderEmail,
@@ -19,6 +25,12 @@ class Message {
     this.imageUrl,
     required this.type,
     required this.reactions,
+
+    this.isReply = false,
+    this.replyingToMessage,
+    this.replyingToSender,
+
+    this.audioUrl,
   });
 
   Map<String, dynamic> toMap() {
@@ -31,6 +43,12 @@ class Message {
       'imageUrl': imageUrl,
       'type': type,
       'reactions': reactions,
+
+      'isReply': isReply,
+      'replyingToMessage': replyingToMessage,
+      'replyingToSender': replyingToSender,
+
+      'audioUrl': audioUrl,
     };
   }
 
@@ -51,6 +69,11 @@ class Message {
       imageUrl: map['imageUrl'],
       type: map['type'] ?? 'text',
       reactions: reactions,
+      isReply: map['isReply'] ?? false,
+      replyingToMessage: map['replyingToMessage'],
+      replyingToSender: map['replyingToSender'],
+
+      audioUrl: map['audioUrl'],
     );
   }
 }

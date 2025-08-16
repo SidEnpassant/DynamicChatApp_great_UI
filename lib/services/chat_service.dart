@@ -24,8 +24,14 @@ class ChatService {
     String receiverId, {
     String? text,
     String? imageUrl,
+    String? audioUrl,
+    Message? repliedToMessage,
   }) async {
-    if (text == null && imageUrl == null) return;
+    if (text == null && imageUrl == null && audioUrl == null) return;
+
+    String type = 'text';
+    if (imageUrl != null) type = 'image';
+    if (audioUrl != null) type = 'audio';
 
     final String currentUserId = _auth.currentUser!.uid;
     final String currentUserEmail = _auth.currentUser!.email!;
@@ -37,9 +43,14 @@ class ChatService {
       receiverId: receiverId,
       message: text ?? '',
       imageUrl: imageUrl,
+      audioUrl: audioUrl,
       type: imageUrl != null ? 'image' : 'text',
       timestamp: timestamp,
       reactions: {},
+
+      isReply: repliedToMessage != null,
+      replyingToMessage: repliedToMessage?.message,
+      replyingToSender: repliedToMessage?.senderEmail,
     );
 
     List<String> ids = [currentUserId, receiverId];

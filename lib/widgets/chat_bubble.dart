@@ -1,5 +1,7 @@
+import 'package:dynamichatapp/widgets/audio_player_bubble.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter_slidable/flutter_slidable.dart';
 
 class ChatBubble extends StatelessWidget {
   final String message;
@@ -9,6 +11,10 @@ class ChatBubble extends StatelessWidget {
   final Map<String, List<String>> reactions;
   final String currentUserId;
   final VoidCallback onLongPress;
+  final bool isReply;
+  final String? replyingToMessage;
+  final String? replyingToSender;
+  final VoidCallback onReply;
 
   const ChatBubble({
     super.key,
@@ -19,22 +25,113 @@ class ChatBubble extends StatelessWidget {
     required this.reactions,
     required this.currentUserId,
     required this.onLongPress,
+    this.isReply = false,
+    this.replyingToMessage,
+    this.replyingToSender,
+    required this.onReply,
   });
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onLongPress: onLongPress,
-      child: Column(
-        crossAxisAlignment: isCurrentUser
-            ? CrossAxisAlignment.end
-            : CrossAxisAlignment.start,
+    return Slidable(
+      key: UniqueKey(),
+      startActionPane: ActionPane(
+        motion: const StretchMotion(),
+        dismissible: DismissiblePane(onDismissed: () => onReply()),
         children: [
-          type == 'image'
-              ? _buildImageBubble(context)
-              : _buildTextBubble(context),
+          SlidableAction(
+            onPressed: (_) => onReply(),
+            backgroundColor: Theme.of(context).primaryColor.withOpacity(0.1),
+            foregroundColor: Theme.of(context).primaryColor,
+            icon: Icons.reply,
+            label: 'Reply',
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ],
+      ),
+      child: GestureDetector(
+        onLongPress: onLongPress,
+        child: Column(
+          crossAxisAlignment: isCurrentUser
+              ? CrossAxisAlignment.end
+              : CrossAxisAlignment.start,
+          children: [
+            if (isReply) _buildQuotedReply(context),
 
-          if (reactions.isNotEmpty) _buildReactionsDisplay(),
+            if (type == 'image')
+              _buildImageBubble(context)
+            else if (type == 'audio')
+              _buildAudioBubble(context) // New condition
+            else
+              _buildTextBubble(context),
+
+            // type == 'image'
+            //     ? _buildImageBubble(context)
+            //     : _buildTextBubble(context),
+            if (reactions.isNotEmpty) _buildReactionsDisplay(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAudioBubble(BuildContext context) {
+    return Container(
+      width: MediaQuery.of(context).size.width * 0.6,
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        // ... (copy decoration from _buildTextBubble)
+      ),
+      child: AudioPlayerBubble(
+        audioUrl: imageUrl!,
+        isCurrentUser: isCurrentUser,
+      ),
+    );
+  }
+
+  Widget _buildQuotedReply(BuildContext context) {
+    return Container(
+      margin: EdgeInsets.only(
+        left: isCurrentUser ? 48 : 8,
+        right: isCurrentUser ? 8 : 48,
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: (isCurrentUser ? Theme.of(context).primaryColor : Colors.grey)
+            .withOpacity(0.15),
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(12),
+          topRight: Radius.circular(12),
+        ),
+        border: Border(
+          left: BorderSide(
+            color: (isCurrentUser
+                ? Theme.of(context).primaryColor
+                : Colors.grey),
+            width: 4,
+          ),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            replyingToSender ?? "User",
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: (isCurrentUser
+                  ? Theme.of(context).primaryColor
+                  : Colors.grey[800]),
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            replyingToMessage ?? "",
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: Colors.grey[700], fontSize: 13),
+          ),
         ],
       ),
     );
@@ -71,79 +168,70 @@ class ChatBubble extends StatelessWidget {
   }
 
   Widget _buildTextBubble(BuildContext context) {
-    return Container(
-      constraints: BoxConstraints(
-        maxWidth: MediaQuery.of(context).size.width * 0.75,
-        minWidth: 60,
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: isCurrentUser
-            ? MainAxisAlignment.end
-            : MainAxisAlignment.start,
-        children: [
-          if (!isCurrentUser) ...[const SizedBox(width: 4)],
-          Flexible(
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: isCurrentUser
-                    ? LinearGradient(
-                        colors: [
-                          Theme.of(context).primaryColor,
-                          Theme.of(context).primaryColor.withOpacity(0.8),
-                        ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      )
-                    : LinearGradient(
-                        colors: [Colors.white, Colors.grey[50]!],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                borderRadius: BorderRadius.only(
-                  topLeft: const Radius.circular(20),
-                  topRight: const Radius.circular(20),
-                  bottomLeft: isCurrentUser
-                      ? const Radius.circular(20)
-                      : const Radius.circular(4),
-                  bottomRight: isCurrentUser
-                      ? const Radius.circular(4)
-                      : const Radius.circular(20),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: isCurrentUser
-                        ? Theme.of(context).primaryColor.withOpacity(0.3)
-                        : Colors.black.withOpacity(0.1),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-                border: !isCurrentUser
-                    ? Border.all(color: Colors.grey[200]!, width: 1)
-                    : null,
+    // We wrap the bubble in a Row to control its alignment and width.
+    return Row(
+      mainAxisSize:
+          MainAxisSize.min, // The Row should only be as wide as its children
+      mainAxisAlignment: isCurrentUser
+          ? MainAxisAlignment.end
+          : MainAxisAlignment.start,
+      children: [
+        Flexible(
+          // Flexible allows the container to shrink and not force the Row to be full width.
+          child: Container(
+            // Your existing beautiful decoration for the bubble
+            decoration: BoxDecoration(
+              gradient: isCurrentUser
+                  ? LinearGradient(
+                      colors: [
+                        Theme.of(context).primaryColor,
+                        Theme.of(context).primaryColor.withOpacity(0.8),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    )
+                  : LinearGradient(
+                      colors: [Colors.white, Colors.grey[50]!],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+              borderRadius: BorderRadius.only(
+                topLeft: const Radius.circular(20),
+                topRight: const Radius.circular(20),
+                bottomLeft: isCurrentUser
+                    ? const Radius.circular(20)
+                    : const Radius.circular(4),
+                bottomRight: isCurrentUser
+                    ? const Radius.circular(4)
+                    : const Radius.circular(20),
               ),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              margin: EdgeInsets.only(
-                left: isCurrentUser ? 40 : 0,
-                right: isCurrentUser ? 0 : 40,
-                top: 4,
-                bottom: 4,
-              ),
-              child: Text(
-                message,
-                style: TextStyle(
-                  color: isCurrentUser ? Colors.white : Colors.black87,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w400,
-                  height: 1.4,
+              boxShadow: [
+                BoxShadow(
+                  color: isCurrentUser
+                      ? Theme.of(context).primaryColor.withOpacity(0.3)
+                      : Colors.black.withOpacity(0.1),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
                 ),
+              ],
+              border: !isCurrentUser
+                  ? Border.all(color: Colors.grey[200]!, width: 1)
+                  : null,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            // We no longer need margins here as the alignment is handled by the Row.
+            child: Text(
+              message,
+              style: TextStyle(
+                color: isCurrentUser ? Colors.white : Colors.black87,
+                fontSize: 16,
+                fontWeight: FontWeight.w400,
+                height: 1.4,
               ),
             ),
           ),
-          if (isCurrentUser) ...[const SizedBox(width: 4)],
-        ],
-      ),
+        ),
+      ],
     );
   }
 

@@ -120,4 +120,22 @@ class StorageService {
       return null;
     }
   }
+
+  Future<String?> uploadAudioMessage(String filePath, String chatRoomId) async {
+    try {
+      final fileName = DateTime.now().millisecondsSinceEpoch.toString();
+      final ref = _storage
+          .ref()
+          .child('audio_messages')
+          .child(chatRoomId)
+          .child('$fileName.m4a');
+
+      await ref.putFile(File(filePath));
+      final url = await ref.getDownloadURL();
+      return url;
+    } catch (e) {
+      print('Error uploading audio message: $e');
+      return null;
+    }
+  }
 }

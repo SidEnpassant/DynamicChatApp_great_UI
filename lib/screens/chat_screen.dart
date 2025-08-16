@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:dynamichatapp/models/message.dart';
 import 'package:dynamichatapp/services/storage_service.dart';
@@ -7,6 +8,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:record/record.dart';
 import '../services/auth_service.dart';
 import '../services/chat_service.dart';
 import '../models/user_profile.dart';
@@ -26,11 +30,14 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   final AuthService _authService = AuthService();
   final StorageService _storageService = StorageService();
   final ImagePicker _picker = ImagePicker();
+  final AudioRecorder _audioRecorder = AudioRecorder();
+  bool _isRecording = false;
 
   Timer? _typingTimer;
   late String _chatRoomId;
   late AnimationController _fabAnimationController;
   late Animation<double> _fabAnimation;
+  Message? _replyingToMessage;
 
   @override
   void initState() {
@@ -54,6 +61,11 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         curve: Curves.elasticOut,
       ),
     );
+    _requestPermissions();
+  }
+
+  Future<void> _requestPermissions() async {
+    await Permission.microphone.request();
   }
 
   void _onTyping() {
@@ -115,6 +127,43 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       false,
     );
     super.dispose();
+    _audioRecorder.dispose();
+  }
+
+  Future<void> _startRecording() async {
+    final hasPermission = await Permission.microphone.isGranted;
+    if (!hasPermission) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Microphone permission is required.")),
+      );
+      return;
+    }
+
+    final Directory tempDir = await getTemporaryDirectory();
+    final path = '${tempDir.path}/audio_message.m4a';
+
+    await _audioRecorder.start(const RecordConfig(), path: path);
+    setState(() {
+      _isRecording = true;
+    });
+  }
+
+  Future<void> _stopRecordingAndSend() async {
+    final path = await _audioRecorder.stop();
+    setState(() {
+      _isRecording = false;
+    });
+
+    if (path != null) {
+      await _chatService.sendMessage(
+        widget.receiver.uid,
+        audioUrl: await _storageService.uploadAudioMessage(path, _chatRoomId),
+        repliedToMessage: _replyingToMessage,
+      );
+      setState(() {
+        _replyingToMessage = null;
+      });
+    }
   }
 
   void _sendMessage() async {
@@ -122,9 +171,13 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       await _chatService.sendMessage(
         widget.receiver.uid,
         text: _messageController.text,
+        repliedToMessage: _replyingToMessage,
       );
       _messageController.clear();
       _fabAnimationController.reverse();
+      setState(() {
+        _replyingToMessage = null;
+      });
     }
   }
 
@@ -418,6 +471,14 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             reactions: message.reactions,
             currentUserId: currentUserId,
             onLongPress: () => _showReactionsDialog(messageId),
+            isReply: message.isReply,
+            replyingToMessage: message.replyingToMessage,
+            replyingToSender: message.replyingToSender,
+            onReply: () {
+              setState(() {
+                _replyingToMessage = message;
+              });
+            },
           ),
           Padding(
             padding: const EdgeInsets.symmetric(
@@ -438,89 +499,442 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     );
   }
 
+  // Widget _buildMessageInput(BuildContext context) {
+  //   return Container(
+  //     padding: const EdgeInsets.all(16.0),
+  //     decoration: BoxDecoration(
+  //       color: Colors.white,
+  //       boxShadow: [
+  //         BoxShadow(
+  //           color: Colors.black.withOpacity(0.05),
+  //           blurRadius: 10,
+  //           offset: const Offset(0, -2),
+  //         ),
+  //       ],
+  //     ),
+  //     child: SafeArea(
+  //       child: Row(
+  //         children: [
+
+  //           Container(
+  //             decoration: BoxDecoration(
+  //               color: Theme.of(context).primaryColor.withOpacity(0.1),
+  //               borderRadius: BorderRadius.circular(12),
+  //             ),
+  //             child: IconButton(
+  //               icon: Icon(
+  //                 Icons.add_photo_alternate_rounded,
+  //                 color: Theme.of(context).primaryColor,
+  //               ),
+  //               onPressed: _sendImage,
+  //             ),
+  //           ),
+  //           const SizedBox(width: 12),
+  //           Expanded(
+  //             child: Container(
+  //               decoration: BoxDecoration(
+  //                 color: Colors.grey[100],
+  //                 borderRadius: BorderRadius.circular(25),
+  //                 border: Border.all(color: Colors.grey[300]!),
+  //               ),
+  //               child: TextField(
+  //                 controller: _messageController,
+  //                 decoration: InputDecoration(
+  //                   hintText: 'Type a message...',
+  //                   hintStyle: TextStyle(color: Colors.grey[500]),
+  //                   border: InputBorder.none,
+  //                   contentPadding: const EdgeInsets.symmetric(
+  //                     horizontal: 20,
+  //                     vertical: 12,
+  //                   ),
+  //                 ),
+  //                 onSubmitted: (_) => _sendMessage(),
+  //                 maxLines: 3,
+  //                 minLines: 1,
+  //               ),
+  //             ),
+  //           ),
+  //           const SizedBox(width: 12),
+  //           ScaleTransition(
+  //             scale: _fabAnimation,
+  //             child: Container(
+  //               decoration: BoxDecoration(
+  //                 gradient: LinearGradient(
+  //                   colors: [
+  //                     Theme.of(context).primaryColor,
+  //                     Theme.of(context).primaryColor.withOpacity(0.8),
+  //                   ],
+  //                 ),
+  //                 borderRadius: BorderRadius.circular(12),
+  //                 boxShadow: [
+  //                   BoxShadow(
+  //                     color: Theme.of(context).primaryColor.withOpacity(0.3),
+  //                     blurRadius: 8,
+  //                     offset: const Offset(0, 2),
+  //                   ),
+  //                 ],
+  //               ),
+  //               child: IconButton(
+  //                 icon: const Icon(Icons.send_rounded, color: Colors.white),
+  //                 onPressed: _sendMessage,
+  //               ),
+  //             ),
+  //           ),
+  //         ],
+  //       ),
+  //     ),
+  //   );
+  // }
+
+  // In lib/screens/chat_screen.dart -> _ChatScreenState class
+
   Widget _buildMessageInput(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16.0),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, -2),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        child: Row(
-          children: [
-            Container(
-              decoration: BoxDecoration(
-                color: Theme.of(context).primaryColor.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: IconButton(
-                icon: Icon(
-                  Icons.add_photo_alternate_rounded,
+    // Check if the text field is empty to decide which button to show
+    final isTextFieldEmpty = _messageController.text.isEmpty;
+
+    return Column(
+      children: [
+        // 1. The "Replying to..." banner (if active)
+        if (_replyingToMessage != null)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: Theme.of(context).primaryColor.withOpacity(0.1),
+              border: Border(top: BorderSide(color: Colors.grey[300]!)),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.reply,
+                  size: 20,
                   color: Theme.of(context).primaryColor,
                 ),
-                onPressed: _sendImage,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.grey[100],
-                  borderRadius: BorderRadius.circular(25),
-                  border: Border.all(color: Colors.grey[300]!),
-                ),
-                child: TextField(
-                  controller: _messageController,
-                  decoration: InputDecoration(
-                    hintText: 'Type a message...',
-                    hintStyle: TextStyle(color: Colors.grey[500]),
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 12,
-                    ),
-                  ),
-                  onSubmitted: (_) => _sendMessage(),
-                  maxLines: 3,
-                  minLines: 1,
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            ScaleTransition(
-              scale: _fabAnimation,
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      Theme.of(context).primaryColor,
-                      Theme.of(context).primaryColor.withOpacity(0.8),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "Replying to ${_replyingToMessage!.senderEmail.split('@')[0]}",
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(context).primaryColor,
+                          fontSize: 13,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _replyingToMessage!.type == 'image'
+                            ? 'An image'
+                            : _replyingToMessage!.message,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: Colors.grey[700], fontSize: 13),
+                      ),
                     ],
                   ),
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Theme.of(context).primaryColor.withOpacity(0.3),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
                 ),
-                child: IconButton(
-                  icon: const Icon(Icons.send_rounded, color: Colors.white),
-                  onPressed: _sendMessage,
+                IconButton(
+                  icon: const Icon(Icons.close, size: 20),
+                  onPressed: () {
+                    setState(() {
+                      _replyingToMessage = null;
+                    });
+                  },
                 ),
-              ),
+              ],
             ),
-          ],
+          ),
+
+        // 2. The "Recording..." indicator (if active)
+        if (_isRecording)
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            color: Colors.red.withOpacity(0.1),
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.mic, color: Colors.red, size: 20),
+                SizedBox(width: 8),
+                Text(
+                  "Recording audio...",
+                  style: TextStyle(
+                    color: Colors.red,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+        // 3. The main message input bar
+        Container(
+          padding: const EdgeInsets.all(16.0),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 10,
+                offset: const Offset(0, -2),
+              ),
+            ],
+          ),
+          child: SafeArea(
+            child: Row(
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).primaryColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: IconButton(
+                    icon: Icon(
+                      Icons.add_photo_alternate_rounded,
+                      color: Theme.of(context).primaryColor,
+                    ),
+                    onPressed: _sendImage,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(25),
+                      border: Border.all(color: Colors.grey[300]!),
+                    ),
+                    child: TextField(
+                      controller: _messageController,
+                      decoration: InputDecoration(
+                        hintText: 'Type a message...',
+                        hintStyle: TextStyle(color: Colors.grey[500]),
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 12,
+                        ),
+                      ),
+                      onSubmitted: (_) => _sendMessage(),
+                      maxLines: 3,
+                      minLines: 1,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+
+                // 4. The conditional Send / Microphone button
+                if (isTextFieldEmpty)
+                  // Show Microphone button
+                  GestureDetector(
+                    onLongPress: _startRecording,
+                    onLongPressEnd: (details) => _stopRecordingAndSend(),
+                    child: CircleAvatar(
+                      radius: 24,
+                      backgroundColor: Theme.of(
+                        context,
+                      ).primaryColor.withOpacity(0.1),
+                      child: Icon(
+                        Icons.mic_rounded,
+                        color: Theme.of(context).primaryColor,
+                        size: 28,
+                      ),
+                    ),
+                  )
+                else
+                  // Show Send button
+                  ScaleTransition(
+                    scale: _fabAnimation,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            Theme.of(context).primaryColor,
+                            Theme.of(context).primaryColor.withOpacity(0.8),
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Theme.of(
+                              context,
+                            ).primaryColor.withOpacity(0.3),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: IconButton(
+                        icon: const Icon(
+                          Icons.send_rounded,
+                          color: Colors.white,
+                        ),
+                        onPressed: _sendMessage,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
         ),
-      ),
+      ],
     );
   }
+
+  // Widget _buildMessageInput(BuildContext context) {
+  //   final isTextFieldEmpty = _messageController.text.isEmpty;
+  //   return Column(
+  //     children: [
+  //       if (_replyingToMessage != null)
+  //         if (_isRecording)
+  //           Container(
+  //             padding: const EdgeInsets.all(16),
+  //             color: Colors.red.withOpacity(0.1),
+  //             child: const Row(
+  //               mainAxisAlignment: MainAxisAlignment.center,
+  //               children: [
+  //                 Icon(Icons.mic, color: Colors.red),
+  //                 SizedBox(width: 8),
+  //                 Text("Recording...", style: TextStyle(color: Colors.red)),
+  //               ],
+  //             ),
+  //           ),
+  //       Container(
+  //         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+  //         decoration: BoxDecoration(
+  //           color: Theme.of(context).primaryColor.withOpacity(0.1),
+  //           border: Border(top: BorderSide(color: Colors.grey[300]!)),
+  //         ),
+  //         child: Row(
+  //           children: [
+  //             Icon(
+  //               Icons.reply,
+  //               size: 20,
+  //               color: Theme.of(context).primaryColor,
+  //             ),
+  //             const SizedBox(width: 8),
+  //             Expanded(
+  //               child: Column(
+  //                 crossAxisAlignment: CrossAxisAlignment.start,
+  //                 children: [
+  //                   Text(
+  //                     "Replying to ${_replyingToMessage!.senderEmail.split('@')[0]}",
+  //                     style: TextStyle(
+  //                       fontWeight: FontWeight.bold,
+  //                       color: Theme.of(context).primaryColor,
+  //                       fontSize: 13,
+  //                     ),
+  //                   ),
+  //                   const SizedBox(height: 2),
+  //                   Text(
+  //                     _replyingToMessage!.type == 'image'
+  //                         ? 'An image'
+  //                         : _replyingToMessage!.message,
+  //                     maxLines: 1,
+  //                     overflow: TextOverflow.ellipsis,
+  //                     style: TextStyle(color: Colors.grey[700], fontSize: 13),
+  //                   ),
+  //                 ],
+  //               ),
+  //             ),
+  //             IconButton(
+  //               icon: const Icon(Icons.close, size: 20),
+  //               onPressed: () {
+  //                 setState(() {
+  //                   _replyingToMessage = null; // Clear the reply state
+  //                 });
+  //               },
+  //             ),
+  //           ],
+  //         ),
+  //       ),
+
+  //       Container(
+  //         padding: const EdgeInsets.all(16.0),
+  //         decoration: BoxDecoration(
+  //           color: Colors.white,
+  //           boxShadow: [
+  //             BoxShadow(
+  //               color: Colors.black.withOpacity(0.05),
+  //               blurRadius: 10,
+  //               offset: const Offset(0, -2),
+  //             ),
+  //           ],
+  //         ),
+  //         child: SafeArea(
+  //           child: Row(
+  //             children: [
+  //               Container(
+  //                 decoration: BoxDecoration(
+  //                   color: Theme.of(context).primaryColor.withOpacity(0.1),
+  //                   borderRadius: BorderRadius.circular(12),
+  //                 ),
+  //                 child: IconButton(
+  //                   icon: Icon(
+  //                     Icons.add_photo_alternate_rounded,
+  //                     color: Theme.of(context).primaryColor,
+  //                   ),
+  //                   onPressed: _sendImage,
+  //                 ),
+  //               ),
+  //               const SizedBox(width: 12),
+  //               Expanded(
+  //                 child: Container(
+  //                   decoration: BoxDecoration(
+  //                     color: Colors.grey[100],
+  //                     borderRadius: BorderRadius.circular(25),
+  //                     border: Border.all(color: Colors.grey[300]!),
+  //                   ),
+  //                   child: TextField(
+  //                     controller: _messageController,
+  //                     decoration: InputDecoration(
+  //                       hintText: 'Type a message...',
+  //                       hintStyle: TextStyle(color: Colors.grey[500]),
+  //                       border: InputBorder.none,
+  //                       contentPadding: const EdgeInsets.symmetric(
+  //                         horizontal: 20,
+  //                         vertical: 12,
+  //                       ),
+  //                     ),
+  //                     onSubmitted: (_) => _sendMessage(),
+  //                     maxLines: 3,
+  //                     minLines: 1,
+  //                   ),
+  //                 ),
+  //               ),
+  //               const SizedBox(width: 12),
+  //               ScaleTransition(
+  //                 scale: _fabAnimation,
+  //                 child: Container(
+  //                   decoration: BoxDecoration(
+  //                     gradient: LinearGradient(
+  //                       colors: [
+  //                         Theme.of(context).primaryColor,
+  //                         Theme.of(context).primaryColor.withOpacity(0.8),
+  //                       ],
+  //                     ),
+  //                     borderRadius: BorderRadius.circular(12),
+  //                     boxShadow: [
+  //                       BoxShadow(
+  //                         color: Theme.of(
+  //                           context,
+  //                         ).primaryColor.withOpacity(0.3),
+  //                         blurRadius: 8,
+  //                         offset: const Offset(0, 2),
+  //                       ),
+  //                     ],
+  //                   ),
+  //                   child: IconButton(
+  //                     icon: const Icon(Icons.send_rounded, color: Colors.white),
+  //                     onPressed: _sendMessage,
+  //                   ),
+  //                 ),
+  //               ),
+  //             ],
+  //           ),
+  //         ),
+  //       ),
+  //     ],
+  //   );
+  // }
 }

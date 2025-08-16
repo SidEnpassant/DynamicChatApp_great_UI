@@ -6,7 +6,6 @@ class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // Get current user
   User? getCurrentUser() {
     return _auth.currentUser;
   }
@@ -20,7 +19,6 @@ class AuthService {
         email: email,
         password: password,
       );
-      // Associate user with OneSignal
       OneSignal.login(userCredential.user!.uid);
       return userCredential;
     } on FirebaseAuthException catch (e) {
@@ -50,31 +48,26 @@ class AuthService {
     required PhoneAuthCredential credential,
   }) async {
     try {
-      // Step 1: Create the user with email and password
       UserCredential userCredential = await _auth
           .createUserWithEmailAndPassword(email: email, password: password);
 
-      // Step 2: Link the verified phone number to the new account
       await userCredential.user!.linkWithCredential(credential);
 
-      // Step 3: Save user info to Firestore
       await _firestore.collection('users').doc(userCredential.user!.uid).set({
         'uid': userCredential.user!.uid,
         'email': email,
         'phoneNumber': credential.smsCode != null
             ? null
-            : userCredential.user!.phoneNumber, // Store phone number
+            : userCredential.user!.phoneNumber,
         'photoURL': null,
         'status': 'Online',
         'lastSeen': Timestamp.now(),
       });
 
-      // Step 4: Associate with OneSignal
       OneSignal.login(userCredential.user!.uid);
 
       return userCredential;
     } on FirebaseAuthException catch (e) {
-      // Handle errors like 'email-already-in-use'
       throw Exception(e.message);
     }
   }
@@ -95,18 +88,15 @@ class AuthService {
     try {
       final userCredential = await _auth.signInWithCredential(credential);
 
-      // Check if user is new
       if (userCredential.additionalUserInfo?.isNewUser ?? false) {
-        // Save new user info to Firestore
         await _firestore.collection('users').doc(userCredential.user!.uid).set({
           'uid': userCredential.user!.uid,
-          'email': userCredential.user!.phoneNumber, // Or prompt for an email
+          'email': userCredential.user!.phoneNumber,
           'photoURL': null,
           'status': 'Online',
           'lastSeen': Timestamp.now(),
         });
       }
-      // Associate with OneSignal
       OneSignal.login(userCredential.user!.uid);
       return userCredential;
     } on FirebaseAuthException catch (e) {
@@ -122,15 +112,12 @@ class AuthService {
       UserCredential userCredential = await _auth
           .createUserWithEmailAndPassword(email: email, password: password);
 
-      // UserCredential userCredential = await _auth
-      //     .createUserWithEmailAndPassword(email: email, password: password);
-      // Save user info in a separate document
       await _firestore.collection('users').doc(userCredential.user!.uid).set({
         'uid': userCredential.user!.uid,
         'email': email,
         'photoURL': null,
-        // Add these new fields for new users
-        'status': 'Online', // Set to Online initially
+
+        'status': 'Online',
         'lastSeen': Timestamp.now(),
       });
       OneSignal.login(userCredential.user!.uid);
@@ -140,7 +127,6 @@ class AuthService {
     }
   }
 
-  // Sign out
   Future<void> signOut() async {
     OneSignal.logout();
     return await _auth.signOut();

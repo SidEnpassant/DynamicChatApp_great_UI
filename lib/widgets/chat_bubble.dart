@@ -6,6 +6,9 @@ class ChatBubble extends StatelessWidget {
   final bool isCurrentUser;
   final String? imageUrl;
   final String type;
+  final Map<String, List<String>> reactions;
+  final String currentUserId;
+  final VoidCallback onLongPress;
 
   const ChatBubble({
     super.key,
@@ -13,13 +16,58 @@ class ChatBubble extends StatelessWidget {
     required this.isCurrentUser,
     this.imageUrl,
     required this.type,
+    required this.reactions,
+    required this.currentUserId,
+    required this.onLongPress,
   });
 
   @override
   Widget build(BuildContext context) {
-    return type == 'image'
-        ? _buildImageBubble(context)
-        : _buildTextBubble(context);
+    return GestureDetector(
+      onLongPress: onLongPress,
+      child: Column(
+        crossAxisAlignment: isCurrentUser
+            ? CrossAxisAlignment.end
+            : CrossAxisAlignment.start,
+        children: [
+          type == 'image'
+              ? _buildImageBubble(context)
+              : _buildTextBubble(context),
+
+          if (reactions.isNotEmpty) _buildReactionsDisplay(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReactionsDisplay() {
+    return Container(
+      margin: const EdgeInsets.only(left: 8, right: 8, top: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.grey[200],
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: reactions.entries.map((entry) {
+          final emoji = entry.key;
+          final count = entry.value.length;
+          final userReacted = entry.value.contains(currentUserId);
+
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4.0),
+            child: Text(
+              '$emoji $count',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: userReacted ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
   }
 
   Widget _buildTextBubble(BuildContext context) {

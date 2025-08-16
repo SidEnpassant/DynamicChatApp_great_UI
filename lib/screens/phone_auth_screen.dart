@@ -40,7 +40,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
     final phoneNumber = "+${selectedCountry.phoneCode}$phone";
 
     if (_phoneController.text.trim().isEmpty) {
-      // Show error
+      SnackBar(content: Text("Please enter a phone number"));
       return;
     }
 
@@ -50,9 +50,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
 
     await _authService.verifyPhoneNumber(
       phoneNumber: phoneNumber,
-      verificationCompleted: (credential) {
-        // Handle auto-verification if needed
-      },
+      verificationCompleted: (credential) {},
       verificationFailed: (e) {
         setState(() {
           _isLoading = false;
@@ -73,26 +71,20 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
           ),
         );
       },
-      codeAutoRetrievalTimeout: (verificationId) {
-        // Handle timeout
-      },
+      codeAutoRetrievalTimeout: (verificationId) {},
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // Use similar styling as your LoginScreen
       body: Container(
-        decoration: BoxDecoration(
-          // ... (copy gradient from login_screen.dart)
-        ),
+        decoration: BoxDecoration(),
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Form(
-                // ... (copy UI structure from login_screen.dart)
                 key: _formKey,
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -112,7 +104,6 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                         if (value == null || value.isEmpty) {
                           return 'Please enter a phone number';
                         }
-                        // Basic length check
                         if (value.replaceAll(RegExp(r'\D'), '').length < 7) {
                           return 'Please enter a valid phone number';
                         }
@@ -151,9 +142,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                       height: 56,
                       child: ElevatedButton(
                         onPressed: _isLoading ? null : _sendOtp,
-                        style: ElevatedButton.styleFrom(
-                          // ... your button style from login_screen.dart
-                        ),
+                        style: ElevatedButton.styleFrom(),
                         child: _isLoading
                             ? const CircularProgressIndicator(
                                 color: Colors.white,

@@ -1,12 +1,14 @@
+import 'package:dynamichatapp/screens/home_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:page_transition/page_transition.dart';
 import 'package:pinput/pinput.dart';
 import '../services/auth_service.dart';
 
 class OtpScreen extends StatefulWidget {
   final String verificationId;
-  final String? email; // Make email optional
-  final String? password; // Make password optional
+  final String? email;
+  final String? password;
   const OtpScreen({
     super.key,
     required this.verificationId,
@@ -22,32 +24,6 @@ class _OtpScreenState extends State<OtpScreen> {
   final _otpController = TextEditingController();
   final AuthService _authService = AuthService();
   bool _isLoading = false;
-
-  // void _verifyOtp() async {
-  //   setState(() {
-  //     _isLoading = true;
-  //   });
-
-  //   try {
-  //     final credential = PhoneAuthProvider.credential(
-  //       verificationId: widget.verificationId,
-  //       smsCode: _otpController.text.trim(),
-  //     );
-  //     await _authService.signInWithCredential(credential);
-  //     // AuthGate will handle navigation
-  //   } catch (e) {
-  //     ScaffoldMessenger.of(context).showSnackBar(
-  //       SnackBar(content: Text("Failed to verify OTP: ${e.toString()}")),
-  //     );
-  //   } finally {
-  //     if (mounted) {
-  //       setState(() {
-  //         _isLoading = false;
-  //       });
-  //     }
-  //   }
-  // }
-
   void _verifyOtp() async {
     setState(() {
       _isLoading = true;
@@ -59,19 +35,32 @@ class _OtpScreenState extends State<OtpScreen> {
         smsCode: _otpController.text.trim(),
       );
 
-      // Check if this is a sign-up or sign-in flow
+      UserCredential userCredential;
+
       if (widget.email != null && widget.password != null) {
-        // SIGN-UP FLOW: Create user and link phone
-        await _authService.signUpAndLinkPhone(
+        // SIGN-UP FLOW
+        userCredential = await _authService.signUpAndLinkPhone(
           email: widget.email!,
           password: widget.password!,
           credential: credential,
         );
       } else {
-        // SIGN-IN FLOW: Just sign in with phone
-        await _authService.signInWithPhoneCredential(credential);
+        // SIGN-IN FLOW
+        userCredential = await _authService.signInWithPhoneCredential(
+          credential,
+        );
       }
-      // AuthGate will handle navigation to HomeScreen
+
+      if (userCredential.user != null && mounted) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          PageTransition(
+            type: PageTransitionType.fade,
+            child: const HomeScreen(),
+          ),
+          (route) => false,
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -91,7 +80,6 @@ class _OtpScreenState extends State<OtpScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Center(
-        // ... (copy gradient from login_screen.dart)
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
@@ -103,11 +91,7 @@ class _OtpScreenState extends State<OtpScreen> {
                     style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 48),
-                  Pinput(
-                    length: 6,
-                    controller: _otpController,
-                    // You can customize the theme to match your app
-                  ),
+                  Pinput(length: 6, controller: _otpController),
                   const SizedBox(height: 32),
                   SizedBox(
                     width: double.infinity,

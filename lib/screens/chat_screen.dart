@@ -73,6 +73,37 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     });
   }
 
+  void _showReactionsDialog(String messageId) {
+    final reactions = ['❤️', '👍', '😂', '😮', '😢', '🙏'];
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        content: Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 12,
+          runSpacing: 12,
+          children: reactions
+              .map(
+                (emoji) => GestureDetector(
+                  onTap: () {
+                    _chatService.toggleMessageReaction(
+                      _chatRoomId,
+                      messageId,
+                      emoji,
+                    );
+                    Navigator.of(context).pop();
+                  },
+                  child: Text(emoji, style: const TextStyle(fontSize: 28)),
+                ),
+              )
+              .toList(),
+        ),
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _messageController.removeListener(_onTyping);
@@ -357,8 +388,10 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildMessageItem(DocumentSnapshot doc) {
+    final messageId = doc.id;
     Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
-    final message = Message.fromMap(data); // Use our new factory constructor
+    final message = Message.fromMap(data);
+    final currentUserId = _authService.getCurrentUser()!.uid;
     bool isCurrentUser = message.senderId == _authService.getCurrentUser()!.uid;
 
     var alignment = isCurrentUser
@@ -382,6 +415,9 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             isCurrentUser: isCurrentUser,
             imageUrl: message.imageUrl,
             type: message.type,
+            reactions: message.reactions,
+            currentUserId: currentUserId,
+            onLongPress: () => _showReactionsDialog(messageId),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(

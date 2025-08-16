@@ -20,45 +20,6 @@ class ChatService {
     });
   }
 
-  // Future<void> sendMessage(
-  //   String receiverId, {
-  //   String? text,
-  //   String? imageUrl,
-  // }) async {
-  //   if (text == null && imageUrl == null) return; // Can't send an empty message
-
-  //   final String currentUserId = _auth.currentUser!.uid;
-  //   final String currentUserEmail = _auth.currentUser!.email!;
-  //   final Timestamp timestamp = Timestamp.now();
-
-  //   Message newMessage = Message(
-  //     senderId: currentUserId,
-  //     senderEmail: currentUserEmail,
-  //     receiverId: receiverId,
-  //     message: text ?? '', // Use text or an empty string
-  //     imageUrl: imageUrl,
-  //     type: imageUrl != null ? 'image' : 'text', // Set the type
-  //     timestamp: timestamp,
-  //   );
-
-  //   List<String> ids = [currentUserId, receiverId];
-  //   ids.sort();
-  //   String chatRoomId = ids.join('_');
-
-  //   await _firestore
-  //       .collection('chat_rooms')
-  //       .doc(chatRoomId)
-  //       .collection('messages')
-  //       .add(newMessage.toMap());
-  //   final String currentUserEmail = _auth.currentUser!.email!;
-  //   await _sendOneSignalNotification(
-  //     receiverId: receiverId,
-  //     senderEmail: currentUserEmail,
-  //     message: text,
-  //     imageUrl: imageUrl,
-  //   );
-  // }
-
   Future<void> sendMessage(
     String receiverId, {
     String? text,
@@ -78,6 +39,7 @@ class ChatService {
       imageUrl: imageUrl,
       type: imageUrl != null ? 'image' : 'text',
       timestamp: timestamp,
+      reactions: {},
     );
 
     List<String> ids = [currentUserId, receiverId];
@@ -90,8 +52,6 @@ class ChatService {
         .collection('messages')
         .add(newMessage.toMap());
 
-    // After saving the message, send the notification using the variable we already have.
-    // The duplicate declaration has been removed from here.
     await _sendOneSignalNotification(
       receiverId: receiverId,
       senderEmail: currentUserEmail,
@@ -100,29 +60,70 @@ class ChatService {
     );
   }
 
+  Future<void> toggleMessageReaction(
+    String chatRoomId,
+    String messageId,
+    String emoji,
+  ) async {
+    final currentUserId = _auth.currentUser!.uid;
+    final messageRef = _firestore
+        .collection('chat_rooms')
+        .doc(chatRoomId)
+        .collection('messages')
+        .doc(messageId);
+
+    await _firestore.runTransaction((transaction) async {
+      final snapshot = await transaction.get(messageRef);
+
+      if (!snapshot.exists) {
+        throw Exception("Message does not exist!");
+      }
+
+      Map<String, List<String>> reactions = Map<String, List<String>>.from(
+        (snapshot.data()!['reactions'] as Map<String, dynamic>? ?? {}).map(
+          (key, value) => MapEntry(key, List<String>.from(value)),
+        ),
+      );
+
+      String? previousReaction;
+
+      reactions.forEach((key, userList) {
+        if (userList.contains(currentUserId)) {
+          previousReaction = key;
+          userList.remove(currentUserId);
+        }
+      });
+
+      reactions.removeWhere((key, userList) => userList.isEmpty);
+
+      if (previousReaction != emoji) {
+        List<String> newUserList = reactions[emoji] ?? [];
+        newUserList.add(currentUserId);
+        reactions[emoji] = newUserList;
+      }
+
+      transaction.update(messageRef, {'reactions': reactions});
+    });
+  }
+
   Future<void> _sendOneSignalNotification({
     required String receiverId,
     required String senderEmail,
     String? message,
     String? imageUrl,
   }) async {
-    // --- IMPORTANT: Replace with your actual keys ---
     const String oneSignalAppId = OnesignalappCredentials.OneSignalId;
     const String oneSignalRestApiKey = OnesignalappCredentials.OneSignaAPI_KEY;
-    // ---------------------------------------------
 
-    // The content of the notification
     final String notificationContent = imageUrl != null
         ? "Sent you an image."
         : message!;
 
     final body = {
       "app_id": oneSignalAppId,
-      // Target the specific user by their external_user_id (which we set as their Firebase UID)
       "include_external_user_ids": [receiverId],
       "headings": {"en": "New message from $senderEmail"},
       "contents": {"en": notificationContent},
-      // This helps group notifications on the device
       "android_group": "chat_app_group",
     };
 
@@ -146,7 +147,6 @@ class ChatService {
     }
   }
 
-  // Get messages
   Stream<QuerySnapshot> getMessages(String userId, String otherUserId) {
     List<String> ids = [userId, otherUserId];
     ids.sort();
@@ -166,12 +166,9 @@ class ChatService {
     bool isTyping,
   ) async {
     final chatRoomRef = _firestore.collection('chat_rooms').doc(chatRoomId);
-    await chatRoomRef.set(
-      {
-        'typingStatus': {userId: isTyping},
-      },
-      SetOptions(merge: true), // Merge to avoid overwriting the whole document
-    );
+    await chatRoomRef.set({
+      'typingStatus': {userId: isTyping},
+    }, SetOptions(merge: true));
   }
 
   Stream<DocumentSnapshot> getChatRoomStream(String chatRoomId) {

@@ -19,7 +19,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final _phoneController = TextEditingController();
   bool _isLoading = false;
 
-  Country selectedCountry = CountryParser.parseCountryCode('US');
+  Country selectedCountry = CountryParser.parseCountryCode('IN');
 
   void _sendOtpForSignUp() async {
     final email = _emailController.text.trim();
@@ -57,7 +57,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
           context,
           PageTransition(
             type: PageTransitionType.rightToLeftWithFade,
-            // Pass all data to the OTP screen for final account creation
             child: OtpScreen(
               verificationId: verificationId,
               email: email,
@@ -72,9 +71,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Build a UI similar to your LoginScreen to collect email, password, and phone
-    // For brevity, a simplified structure is shown here.
-    // You should copy the beautiful UI from your login_screen.dart
     return Scaffold(
       appBar: AppBar(title: const Text("Create Account")),
       body: SingleChildScrollView(
@@ -94,11 +90,45 @@ class _SignUpScreenState extends State<SignUpScreen> {
               obscureText: true,
             ),
             const SizedBox(height: 10),
+
             CustomTextField(
               controller: _phoneController,
               hintText: 'Phone number',
-              prefixIcon: Icons.phone,
-              // ... Add your country picker prefix widget here ...
+              prefixWidget: InkWell(
+                onTap: () {
+                  showCountryPicker(
+                    context: context,
+                    countryListTheme: const CountryListThemeData(
+                      bottomSheetHeight: 500,
+                    ),
+                    onSelect: (value) {
+                      setState(() {
+                        selectedCountry = value;
+                      });
+                    },
+                  );
+                },
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
+                  child: Text(
+                    "${selectedCountry.flagEmoji} +${selectedCountry.phoneCode}",
+                    style: const TextStyle(
+                      fontSize: 16,
+                      color: Colors.black87,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'Please enter a phone number';
+                }
+                if (value.replaceAll(RegExp(r'\D'), '').length < 7) {
+                  return 'Please enter a valid phone number';
+                }
+                return null;
+              },
             ),
             const SizedBox(height: 30),
             SizedBox(

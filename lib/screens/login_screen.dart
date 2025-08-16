@@ -146,7 +146,6 @@ class _LoginScreenState extends State<LoginScreen>
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      // Logo and Welcome Section
                       Container(
                         padding: const EdgeInsets.all(24),
                         decoration: BoxDecoration(
@@ -219,7 +218,6 @@ class _LoginScreenState extends State<LoginScreen>
                           padding: const EdgeInsets.all(24),
                           child: Column(
                             children: [
-                              // Email Field
                               CustomTextField(
                                 controller: _emailController,
                                 hintText: 'Email address',
@@ -316,9 +314,7 @@ class _LoginScreenState extends State<LoginScreen>
                                       ),
                                     );
                                   },
-                                  style: OutlinedButton.styleFrom(
-                                    // style to match your app
-                                  ),
+                                  style: OutlinedButton.styleFrom(),
                                 ),
                               ),
                             ],
@@ -343,13 +339,7 @@ class _LoginScreenState extends State<LoginScreen>
                               ),
                             );
                           },
-                          // _isLoading
-                          //     ? null
-                          //     : () {
-                          //         setState(() {
-                          //           _isLogin = !_isLogin;
-                          //         });
-                          //       },
+
                           style: TextButton.styleFrom(
                             foregroundColor: Theme.of(context).primaryColor,
                             padding: const EdgeInsets.symmetric(
@@ -363,19 +353,11 @@ class _LoginScreenState extends State<LoginScreen>
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(
-                                // _isLogin
-                                //?
-                                Icons.person_add_outlined,
-                                // : Icons.login_outlined,
-                                size: 20,
-                              ),
+                              Icon(Icons.person_add_outlined, size: 20),
                               const SizedBox(width: 8),
                               Text(
-                                // _isLogin
-                                // ?
                                 'New here? Create account',
-                                // : 'Already have account? Sign in',
+
                                 style: const TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w600,

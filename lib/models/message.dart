@@ -8,6 +8,7 @@ class Message {
   final Timestamp timestamp;
   final String? imageUrl;
   final String type;
+  final Map<String, List<String>> reactions;
 
   Message({
     required this.senderId,
@@ -17,6 +18,7 @@ class Message {
     required this.timestamp,
     this.imageUrl,
     required this.type,
+    required this.reactions,
   });
 
   Map<String, dynamic> toMap() {
@@ -28,10 +30,18 @@ class Message {
       'timestamp': timestamp,
       'imageUrl': imageUrl,
       'type': type,
+      'reactions': reactions,
     };
   }
 
   factory Message.fromMap(Map<String, dynamic> map) {
+    final reactionsData = map['reactions'] as Map<String, dynamic>? ?? {};
+    final Map<String, List<String>> reactions = {};
+    reactionsData.forEach((key, value) {
+      if (value is List) {
+        reactions[key] = List<String>.from(value);
+      }
+    });
     return Message(
       senderId: map['senderId'],
       senderEmail: map['senderEmail'],
@@ -40,6 +50,7 @@ class Message {
       timestamp: map['timestamp'],
       imageUrl: map['imageUrl'],
       type: map['type'] ?? 'text',
+      reactions: reactions,
     );
   }
 }

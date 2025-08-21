@@ -34,4 +34,15 @@ class UserProfile {
       lastSeen: map['lastSeen'] ?? Timestamp.now(),
     );
   }
+
+  // ✅ Add this so List.contains() works properly
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is UserProfile &&
+          runtimeType == other.runtimeType &&
+          uid == other.uid;
+
+  @override
+  int get hashCode => uid.hashCode;
 }

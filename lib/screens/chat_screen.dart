@@ -1,6 +1,5 @@
 import 'dart:async';
-import 'dart:io';
-
+import 'package:dynamichatapp/models/group_profile.dart';
 import 'package:dynamichatapp/models/message.dart';
 import 'package:dynamichatapp/services/storage_service.dart';
 import 'package:flutter/material.dart';
@@ -8,17 +7,22 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:permission_handler/permission_handler.dart';
-import 'package:record/record.dart';
 import '../services/auth_service.dart';
 import '../services/chat_service.dart';
 import '../models/user_profile.dart';
 import '../widgets/chat_bubble.dart';
 
 class ChatScreen extends StatefulWidget {
-  final UserProfile receiver;
-  ChatScreen({super.key, required this.receiver});
+  final UserProfile? receiver;
+  final GroupProfile? group;
+  final bool isGroupChat;
+
+  const ChatScreen({
+    super.key,
+    this.receiver,
+    this.group,
+    this.isGroupChat = false,
+  });
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -30,59 +34,105 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   final AuthService _authService = AuthService();
   final StorageService _storageService = StorageService();
   final ImagePicker _picker = ImagePicker();
-  final AudioRecorder _audioRecorder = AudioRecorder();
-  bool _isRecording = false;
 
   Timer? _typingTimer;
-  late String _chatRoomId;
-  late AnimationController _fabAnimationController;
-  late Animation<double> _fabAnimation;
+  late String _chatEntityId; // can be roomId or groupId
   Message? _replyingToMessage;
 
   @override
   void initState() {
     super.initState();
-    List<String> ids = [
-      _authService.getCurrentUser()!.uid,
-      widget.receiver.uid,
-    ];
-    ids.sort();
-    _chatRoomId = ids.join('_');
+
+    if (widget.isGroupChat) {
+      _chatEntityId = widget.group!.groupId;
+    } else {
+      List<String> ids = [
+        _authService.getCurrentUser()!.uid,
+        widget.receiver!.uid,
+      ];
+      ids.sort();
+      _chatEntityId = ids.join('_');
+    }
 
     _messageController.addListener(_onTyping);
-
-    _fabAnimationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-    );
-    _fabAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _fabAnimationController,
-        curve: Curves.elasticOut,
-      ),
-    );
-    _requestPermissions();
-  }
-
-  Future<void> _requestPermissions() async {
-    await Permission.microphone.request();
   }
 
   void _onTyping() {
-    final currentUser = _authService.getCurrentUser()!;
+    // forces rebuild to switch mic/send button dynamically
+    setState(() {});
 
+    if (widget.isGroupChat) return; // typing only for 1:1 chat
+
+    final currentUser = _authService.getCurrentUser()!;
     _typingTimer?.cancel();
 
     if (_messageController.text.isNotEmpty) {
-      _chatService.updateTypingStatus(_chatRoomId, currentUser.uid, true);
-      _fabAnimationController.forward();
-    } else {
-      _fabAnimationController.reverse();
+      _chatService.updateTypingStatus(_chatEntityId, currentUser.uid, true);
     }
-
     _typingTimer = Timer(const Duration(seconds: 2), () {
-      _chatService.updateTypingStatus(_chatRoomId, currentUser.uid, false);
+      _chatService.updateTypingStatus(_chatEntityId, currentUser.uid, false);
     });
+  }
+
+  @override
+  void dispose() {
+    _messageController.removeListener(_onTyping);
+    _typingTimer?.cancel();
+    if (!widget.isGroupChat) {
+      _chatService.updateTypingStatus(
+        _chatEntityId,
+        _authService.getCurrentUser()!.uid,
+        false,
+      );
+    }
+    super.dispose();
+  }
+
+  void _sendMessage() async {
+    if (_messageController.text.isNotEmpty) {
+      final receiverId = widget.isGroupChat
+          ? widget.group!.groupId
+          : widget.receiver!.uid;
+
+      await _chatService.sendMessage(
+        receiverId,
+        isGroup: widget.isGroupChat,
+        text: _messageController.text,
+        repliedToMessage: _replyingToMessage,
+      );
+
+      _messageController.clear();
+      setState(() {
+        _replyingToMessage = null;
+      });
+    }
+  }
+
+  void _sendImage() async {
+    final XFile? image = await _picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 70,
+    );
+    if (image != null) {
+      final imageUrl = await _storageService.uploadChatImage(
+        image,
+        _chatEntityId,
+      );
+      if (imageUrl != null) {
+        final receiverId = widget.isGroupChat
+            ? widget.group!.groupId
+            : widget.receiver!.uid;
+        await _chatService.sendMessage(
+          receiverId,
+          isGroup: widget.isGroupChat,
+          imageUrl: imageUrl,
+          repliedToMessage: _replyingToMessage,
+        );
+        setState(() {
+          _replyingToMessage = null;
+        });
+      }
+    }
   }
 
   void _showReactionsDialog(String messageId) {
@@ -101,7 +151,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                 (emoji) => GestureDetector(
                   onTap: () {
                     _chatService.toggleMessageReaction(
-                      _chatRoomId,
+                      _chatEntityId,
                       messageId,
                       emoji,
                     );
@@ -114,93 +164,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         ),
       ),
     );
-  }
-
-  @override
-  void dispose() {
-    _messageController.removeListener(_onTyping);
-    _typingTimer?.cancel();
-    _fabAnimationController.dispose();
-    _chatService.updateTypingStatus(
-      _chatRoomId,
-      _authService.getCurrentUser()!.uid,
-      false,
-    );
-    super.dispose();
-    _audioRecorder.dispose();
-  }
-
-  Future<void> _startRecording() async {
-    final hasPermission = await Permission.microphone.isGranted;
-    if (!hasPermission) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Microphone permission is required.")),
-      );
-      return;
-    }
-
-    final Directory tempDir = await getTemporaryDirectory();
-    final path = '${tempDir.path}/audio_message.m4a';
-
-    await _audioRecorder.start(const RecordConfig(), path: path);
-    setState(() {
-      _isRecording = true;
-    });
-  }
-
-  Future<void> _stopRecordingAndSend() async {
-    final path = await _audioRecorder.stop();
-    setState(() {
-      _isRecording = false;
-    });
-
-    if (path != null) {
-      await _chatService.sendMessage(
-        widget.receiver.uid,
-        audioUrl: await _storageService.uploadAudioMessage(path, _chatRoomId),
-        repliedToMessage: _replyingToMessage,
-      );
-      setState(() {
-        _replyingToMessage = null;
-      });
-    }
-  }
-
-  void _sendMessage() async {
-    if (_messageController.text.isNotEmpty) {
-      await _chatService.sendMessage(
-        widget.receiver.uid,
-        text: _messageController.text,
-        repliedToMessage: _replyingToMessage,
-      );
-      _messageController.clear();
-      _fabAnimationController.reverse();
-      setState(() {
-        _replyingToMessage = null;
-      });
-    }
-  }
-
-  void _sendImage() async {
-    final XFile? image = await _picker.pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 70,
-    );
-
-    if (image != null) {
-      List<String> ids = [
-        _authService.getCurrentUser()!.uid,
-        widget.receiver.uid,
-      ];
-      ids.sort();
-      String chatRoomId = ids.join('_');
-
-      final imageUrl = await _storageService.uploadChatImage(image, chatRoomId);
-
-      if (imageUrl != null) {
-        await _chatService.sendMessage(widget.receiver.uid, imageUrl: imageUrl);
-      }
-    }
   }
 
   @override
@@ -243,25 +206,20 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             ),
             title: Row(
               children: [
-                Hero(
-                  tag: 'avatar_${widget.receiver.uid}',
-                  child: Container(
-                    padding: const EdgeInsets.all(2),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 2),
-                    ),
+                if (!widget.isGroupChat)
+                  Hero(
+                    tag: 'avatar_${widget.receiver!.uid}',
                     child: CircleAvatar(
                       radius: 22,
-                      backgroundImage: widget.receiver.photoURL != null
+                      backgroundImage: widget.receiver!.photoURL != null
                           ? CachedNetworkImageProvider(
-                              widget.receiver.photoURL!,
+                              widget.receiver!.photoURL!,
                             )
                           : null,
                       backgroundColor: Colors.white.withOpacity(0.3),
-                      child: widget.receiver.photoURL == null
+                      child: widget.receiver!.photoURL == null
                           ? Text(
-                              widget.receiver.email[0].toUpperCase(),
+                              widget.receiver!.email[0].toUpperCase(),
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontWeight: FontWeight.bold,
@@ -270,32 +228,32 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                             )
                           : null,
                     ),
+                  )
+                else
+                  CircleAvatar(
+                    radius: 22,
+                    backgroundColor: Colors.white.withOpacity(0.3),
+                    child: Text(
+                      widget.group!.groupName[0].toUpperCase(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                      ),
+                    ),
                   ),
-                ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        widget.receiver.email.split('@')[0],
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const Text(
-                        'Online',
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w400,
-                        ),
-                      ),
-                    ],
+                  child: Text(
+                    widget.isGroupChat
+                        ? widget.group!.groupName
+                        : widget.receiver!.email.split('@')[0],
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
@@ -316,115 +274,72 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           ),
         ),
       ),
-      body: StreamBuilder<DocumentSnapshot>(
-        stream: _chatService.getChatRoomStream(_chatRoomId),
-        builder: (context, snapshot) {
-          bool isReceiverTyping = false;
-          if (snapshot.hasData && snapshot.data!.data() != null) {
-            final data = snapshot.data!.data() as Map<String, dynamic>;
-            if (data.containsKey('typingStatus') &&
-                data['typingStatus'].containsKey(widget.receiver.uid)) {
-              isReceiverTyping =
-                  data['typingStatus'][widget.receiver.uid] ?? false;
-            }
-          }
-
-          return Column(
-            children: [
-              Expanded(child: _buildMessageList()),
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 300),
-                height: isReceiverTyping ? 50 : 0,
-                child: isReceiverTyping
-                    ? Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 20.0,
-                          vertical: 8.0,
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: Colors.grey[200],
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  CircleAvatar(
-                                    radius: 8,
-                                    backgroundImage:
-                                        widget.receiver.photoURL != null
-                                        ? CachedNetworkImageProvider(
-                                            widget.receiver.photoURL!,
-                                          )
-                                        : null,
-                                    backgroundColor: Colors.grey[400],
-                                    child: widget.receiver.photoURL == null
-                                        ? Text(
-                                            widget.receiver.email[0]
-                                                .toUpperCase(),
-                                            style: const TextStyle(
-                                              fontSize: 8,
-                                              color: Colors.white,
-                                            ),
-                                          )
-                                        : null,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'typing...',
-                                    style: TextStyle(
-                                      color: Colors.grey[600],
-                                      fontStyle: FontStyle.italic,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.grey[400],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    : null,
-              ),
-              _buildMessageInput(context),
-            ],
-          );
-        },
+      body: Column(
+        children: [
+          Expanded(child: _buildMessageList()),
+          if (!widget.isGroupChat) _buildTypingIndicator(),
+          _buildMessageInput(context),
+        ],
       ),
+    );
+  }
+
+  Widget _buildTypingIndicator() {
+    return StreamBuilder<DocumentSnapshot>(
+      stream: _chatService.getChatRoomStream(_chatEntityId),
+      builder: (context, snapshot) {
+        bool isReceiverTyping = false;
+        if (snapshot.hasData && snapshot.data!.data() != null) {
+          final data = snapshot.data!.data() as Map<String, dynamic>;
+          if (data.containsKey('typingStatus') &&
+              data['typingStatus'].containsKey(widget.receiver!.uid)) {
+            isReceiverTyping =
+                data['typingStatus'][widget.receiver!.uid] ?? false;
+          }
+        }
+
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          height: isReceiverTyping ? 50 : 0,
+          child: isReceiverTyping
+              ? Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20.0,
+                    vertical: 8.0,
+                  ),
+                  child: Row(
+                    children: [
+                      const Text(
+                        "typing...",
+                        style: TextStyle(
+                          color: Colors.grey,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ],
+                  ),
+                )
+              : null,
+        );
+      },
     );
   }
 
   Widget _buildMessageList() {
     String senderId = _authService.getCurrentUser()!.uid;
     return StreamBuilder<QuerySnapshot>(
-      stream: _chatService.getMessages(widget.receiver.uid, senderId),
+      stream: widget.isGroupChat
+          ? _chatService.getGroupMessagesStream(_chatEntityId)
+          : _chatService.getMessages(widget.receiver!.uid, senderId),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.error_outline, size: 64, color: Colors.grey[400]),
-                const SizedBox(height: 16),
-                Text(
-                  "Something went wrong",
-                  style: TextStyle(color: Colors.grey[600], fontSize: 16),
-                ),
-              ],
-            ),
-          );
+          return const Center(child: Text("Something went wrong"));
         }
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator(strokeWidth: 3));
@@ -445,7 +360,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
     final message = Message.fromMap(data);
     final currentUserId = _authService.getCurrentUser()!.uid;
-    bool isCurrentUser = message.senderId == _authService.getCurrentUser()!.uid;
+    bool isCurrentUser = message.senderId == currentUserId;
 
     var alignment = isCurrentUser
         ? Alignment.centerRight
@@ -499,102 +414,11 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     );
   }
 
-  // Widget _buildMessageInput(BuildContext context) {
-  //   return Container(
-  //     padding: const EdgeInsets.all(16.0),
-  //     decoration: BoxDecoration(
-  //       color: Colors.white,
-  //       boxShadow: [
-  //         BoxShadow(
-  //           color: Colors.black.withOpacity(0.05),
-  //           blurRadius: 10,
-  //           offset: const Offset(0, -2),
-  //         ),
-  //       ],
-  //     ),
-  //     child: SafeArea(
-  //       child: Row(
-  //         children: [
-
-  //           Container(
-  //             decoration: BoxDecoration(
-  //               color: Theme.of(context).primaryColor.withOpacity(0.1),
-  //               borderRadius: BorderRadius.circular(12),
-  //             ),
-  //             child: IconButton(
-  //               icon: Icon(
-  //                 Icons.add_photo_alternate_rounded,
-  //                 color: Theme.of(context).primaryColor,
-  //               ),
-  //               onPressed: _sendImage,
-  //             ),
-  //           ),
-  //           const SizedBox(width: 12),
-  //           Expanded(
-  //             child: Container(
-  //               decoration: BoxDecoration(
-  //                 color: Colors.grey[100],
-  //                 borderRadius: BorderRadius.circular(25),
-  //                 border: Border.all(color: Colors.grey[300]!),
-  //               ),
-  //               child: TextField(
-  //                 controller: _messageController,
-  //                 decoration: InputDecoration(
-  //                   hintText: 'Type a message...',
-  //                   hintStyle: TextStyle(color: Colors.grey[500]),
-  //                   border: InputBorder.none,
-  //                   contentPadding: const EdgeInsets.symmetric(
-  //                     horizontal: 20,
-  //                     vertical: 12,
-  //                   ),
-  //                 ),
-  //                 onSubmitted: (_) => _sendMessage(),
-  //                 maxLines: 3,
-  //                 minLines: 1,
-  //               ),
-  //             ),
-  //           ),
-  //           const SizedBox(width: 12),
-  //           ScaleTransition(
-  //             scale: _fabAnimation,
-  //             child: Container(
-  //               decoration: BoxDecoration(
-  //                 gradient: LinearGradient(
-  //                   colors: [
-  //                     Theme.of(context).primaryColor,
-  //                     Theme.of(context).primaryColor.withOpacity(0.8),
-  //                   ],
-  //                 ),
-  //                 borderRadius: BorderRadius.circular(12),
-  //                 boxShadow: [
-  //                   BoxShadow(
-  //                     color: Theme.of(context).primaryColor.withOpacity(0.3),
-  //                     blurRadius: 8,
-  //                     offset: const Offset(0, 2),
-  //                   ),
-  //                 ],
-  //               ),
-  //               child: IconButton(
-  //                 icon: const Icon(Icons.send_rounded, color: Colors.white),
-  //                 onPressed: _sendMessage,
-  //               ),
-  //             ),
-  //           ),
-  //         ],
-  //       ),
-  //     ),
-  //   );
-  // }
-
-  // In lib/screens/chat_screen.dart -> _ChatScreenState class
-
   Widget _buildMessageInput(BuildContext context) {
-    // Check if the text field is empty to decide which button to show
-    final isTextFieldEmpty = _messageController.text.isEmpty;
+    final bool showSendButton = _messageController.text.isNotEmpty;
 
     return Column(
       children: [
-        // 1. The "Replying to..." banner (if active)
         if (_replyingToMessage != null)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -645,29 +469,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
               ],
             ),
           ),
-
-        // 2. The "Recording..." indicator (if active)
-        if (_isRecording)
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            color: Colors.red.withOpacity(0.1),
-            child: const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.mic, color: Colors.red, size: 20),
-                SizedBox(width: 8),
-                Text(
-                  "Recording audio...",
-                  style: TextStyle(
-                    color: Colors.red,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-        // 3. The main message input bar
         Container(
           padding: const EdgeInsets.all(16.0),
           decoration: BoxDecoration(
@@ -683,18 +484,10 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           child: SafeArea(
             child: Row(
               children: [
-                Container(
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).primaryColor.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: IconButton(
-                    icon: Icon(
-                      Icons.add_photo_alternate_rounded,
-                      color: Theme.of(context).primaryColor,
-                    ),
-                    onPressed: _sendImage,
-                  ),
+                IconButton(
+                  icon: const Icon(Icons.add_photo_alternate_rounded),
+                  onPressed: _sendImage,
+                  color: Theme.of(context).primaryColor,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -722,57 +515,26 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                   ),
                 ),
                 const SizedBox(width: 12),
-
-                // 4. The conditional Send / Microphone button
-                if (isTextFieldEmpty)
-                  // Show Microphone button
-                  GestureDetector(
-                    onLongPress: _startRecording,
-                    onLongPressEnd: (details) => _stopRecordingAndSend(),
-                    child: CircleAvatar(
-                      radius: 24,
-                      backgroundColor: Theme.of(
-                        context,
-                      ).primaryColor.withOpacity(0.1),
-                      child: Icon(
-                        Icons.mic_rounded,
-                        color: Theme.of(context).primaryColor,
-                        size: 28,
-                      ),
-                    ),
-                  )
-                else
-                  // Show Send button
-                  ScaleTransition(
-                    scale: _fabAnimation,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            Theme.of(context).primaryColor,
-                            Theme.of(context).primaryColor.withOpacity(0.8),
-                          ],
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 200),
+                  transitionBuilder: (child, animation) =>
+                      ScaleTransition(scale: animation, child: child),
+                  child: showSendButton
+                      ? IconButton(
+                          key: const ValueKey('send_button'),
+                          icon: const Icon(Icons.send_rounded),
+                          onPressed: _sendMessage,
+                          color: Theme.of(context).primaryColor,
+                        )
+                      : IconButton(
+                          key: const ValueKey('mic_button'),
+                          icon: const Icon(Icons.mic_rounded),
+                          onPressed: () {
+                            // mic feature to be implemented
+                          },
+                          color: Theme.of(context).primaryColor,
                         ),
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Theme.of(
-                              context,
-                            ).primaryColor.withOpacity(0.3),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: IconButton(
-                        icon: const Icon(
-                          Icons.send_rounded,
-                          color: Colors.white,
-                        ),
-                        onPressed: _sendMessage,
-                      ),
-                    ),
-                  ),
+                ),
               ],
             ),
           ),
@@ -780,161 +542,4 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       ],
     );
   }
-
-  // Widget _buildMessageInput(BuildContext context) {
-  //   final isTextFieldEmpty = _messageController.text.isEmpty;
-  //   return Column(
-  //     children: [
-  //       if (_replyingToMessage != null)
-  //         if (_isRecording)
-  //           Container(
-  //             padding: const EdgeInsets.all(16),
-  //             color: Colors.red.withOpacity(0.1),
-  //             child: const Row(
-  //               mainAxisAlignment: MainAxisAlignment.center,
-  //               children: [
-  //                 Icon(Icons.mic, color: Colors.red),
-  //                 SizedBox(width: 8),
-  //                 Text("Recording...", style: TextStyle(color: Colors.red)),
-  //               ],
-  //             ),
-  //           ),
-  //       Container(
-  //         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-  //         decoration: BoxDecoration(
-  //           color: Theme.of(context).primaryColor.withOpacity(0.1),
-  //           border: Border(top: BorderSide(color: Colors.grey[300]!)),
-  //         ),
-  //         child: Row(
-  //           children: [
-  //             Icon(
-  //               Icons.reply,
-  //               size: 20,
-  //               color: Theme.of(context).primaryColor,
-  //             ),
-  //             const SizedBox(width: 8),
-  //             Expanded(
-  //               child: Column(
-  //                 crossAxisAlignment: CrossAxisAlignment.start,
-  //                 children: [
-  //                   Text(
-  //                     "Replying to ${_replyingToMessage!.senderEmail.split('@')[0]}",
-  //                     style: TextStyle(
-  //                       fontWeight: FontWeight.bold,
-  //                       color: Theme.of(context).primaryColor,
-  //                       fontSize: 13,
-  //                     ),
-  //                   ),
-  //                   const SizedBox(height: 2),
-  //                   Text(
-  //                     _replyingToMessage!.type == 'image'
-  //                         ? 'An image'
-  //                         : _replyingToMessage!.message,
-  //                     maxLines: 1,
-  //                     overflow: TextOverflow.ellipsis,
-  //                     style: TextStyle(color: Colors.grey[700], fontSize: 13),
-  //                   ),
-  //                 ],
-  //               ),
-  //             ),
-  //             IconButton(
-  //               icon: const Icon(Icons.close, size: 20),
-  //               onPressed: () {
-  //                 setState(() {
-  //                   _replyingToMessage = null; // Clear the reply state
-  //                 });
-  //               },
-  //             ),
-  //           ],
-  //         ),
-  //       ),
-
-  //       Container(
-  //         padding: const EdgeInsets.all(16.0),
-  //         decoration: BoxDecoration(
-  //           color: Colors.white,
-  //           boxShadow: [
-  //             BoxShadow(
-  //               color: Colors.black.withOpacity(0.05),
-  //               blurRadius: 10,
-  //               offset: const Offset(0, -2),
-  //             ),
-  //           ],
-  //         ),
-  //         child: SafeArea(
-  //           child: Row(
-  //             children: [
-  //               Container(
-  //                 decoration: BoxDecoration(
-  //                   color: Theme.of(context).primaryColor.withOpacity(0.1),
-  //                   borderRadius: BorderRadius.circular(12),
-  //                 ),
-  //                 child: IconButton(
-  //                   icon: Icon(
-  //                     Icons.add_photo_alternate_rounded,
-  //                     color: Theme.of(context).primaryColor,
-  //                   ),
-  //                   onPressed: _sendImage,
-  //                 ),
-  //               ),
-  //               const SizedBox(width: 12),
-  //               Expanded(
-  //                 child: Container(
-  //                   decoration: BoxDecoration(
-  //                     color: Colors.grey[100],
-  //                     borderRadius: BorderRadius.circular(25),
-  //                     border: Border.all(color: Colors.grey[300]!),
-  //                   ),
-  //                   child: TextField(
-  //                     controller: _messageController,
-  //                     decoration: InputDecoration(
-  //                       hintText: 'Type a message...',
-  //                       hintStyle: TextStyle(color: Colors.grey[500]),
-  //                       border: InputBorder.none,
-  //                       contentPadding: const EdgeInsets.symmetric(
-  //                         horizontal: 20,
-  //                         vertical: 12,
-  //                       ),
-  //                     ),
-  //                     onSubmitted: (_) => _sendMessage(),
-  //                     maxLines: 3,
-  //                     minLines: 1,
-  //                   ),
-  //                 ),
-  //               ),
-  //               const SizedBox(width: 12),
-  //               ScaleTransition(
-  //                 scale: _fabAnimation,
-  //                 child: Container(
-  //                   decoration: BoxDecoration(
-  //                     gradient: LinearGradient(
-  //                       colors: [
-  //                         Theme.of(context).primaryColor,
-  //                         Theme.of(context).primaryColor.withOpacity(0.8),
-  //                       ],
-  //                     ),
-  //                     borderRadius: BorderRadius.circular(12),
-  //                     boxShadow: [
-  //                       BoxShadow(
-  //                         color: Theme.of(
-  //                           context,
-  //                         ).primaryColor.withOpacity(0.3),
-  //                         blurRadius: 8,
-  //                         offset: const Offset(0, 2),
-  //                       ),
-  //                     ],
-  //                   ),
-  //                   child: IconButton(
-  //                     icon: const Icon(Icons.send_rounded, color: Colors.white),
-  //                     onPressed: _sendMessage,
-  //                   ),
-  //                 ),
-  //               ),
-  //             ],
-  //           ),
-  //         ),
-  //       ),
-  //     ],
-  //   );
-  // }
 }

@@ -10,15 +10,13 @@ class NotificationService {
     final fcmToken = await _firebaseMessaging.getToken();
     print('FCM Token: $fcmToken');
 
-    // Save the token to the current user's document in Firestore
     final user = FirebaseAuth.instance.currentUser;
     if (user != null && fcmToken != null) {
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).update(
-        {'fcmToken': fcmToken},
-      );
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+        'fcmToken': fcmToken,
+      }, SetOptions(merge: true));
     }
 
-    // Handle incoming messages
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       print('Got a message whilst in the foreground!');
       print('Message data: ${message.data}');

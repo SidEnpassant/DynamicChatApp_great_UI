@@ -82,10 +82,10 @@ class ChatBubble extends StatelessWidget {
       decoration: BoxDecoration(
         // ... (copy decoration from _buildTextBubble)
       ),
-      child: AudioPlayerBubble(
-        audioUrl: imageUrl!,
-        isCurrentUser: isCurrentUser,
-      ),
+      // child: AudioPlayerBubble(
+      //   audioUrl: imageUrl!,
+      //   isCurrentUser: isCurrentUser,
+      // ),
     );
   }
 
@@ -112,6 +112,7 @@ class ChatBubble extends StatelessWidget {
           ),
         ),
       ),
+
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

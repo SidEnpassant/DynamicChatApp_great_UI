@@ -14,8 +14,6 @@ class Message {
   final String? replyingToMessage;
   final String? replyingToSender;
 
-  final String? audioUrl;
-
   Message({
     required this.senderId,
     required this.senderEmail,
@@ -29,8 +27,6 @@ class Message {
     this.isReply = false,
     this.replyingToMessage,
     this.replyingToSender,
-
-    this.audioUrl,
   });
 
   Map<String, dynamic> toMap() {
@@ -47,8 +43,6 @@ class Message {
       'isReply': isReply,
       'replyingToMessage': replyingToMessage,
       'replyingToSender': replyingToSender,
-
-      'audioUrl': audioUrl,
     };
   }
 
@@ -72,8 +66,6 @@ class Message {
       isReply: map['isReply'] ?? false,
       replyingToMessage: map['replyingToMessage'],
       replyingToSender: map['replyingToSender'],
-
-      audioUrl: map['audioUrl'],
     );
   }
 }

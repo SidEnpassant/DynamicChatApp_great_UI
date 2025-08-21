@@ -16,6 +16,10 @@ class ChatBubble extends StatelessWidget {
   final String? replyingToSender;
   final VoidCallback onReply;
 
+  final bool isGroupChat;
+  final String? senderName;
+  final String? senderPhotoURL;
+
   const ChatBubble({
     super.key,
     required this.message,
@@ -29,6 +33,10 @@ class ChatBubble extends StatelessWidget {
     this.replyingToMessage,
     this.replyingToSender,
     required this.onReply,
+
+    this.isGroupChat = false,
+    this.senderName,
+    this.senderPhotoURL,
   });
 
   @override
@@ -51,24 +59,63 @@ class ChatBubble extends StatelessWidget {
       ),
       child: GestureDetector(
         onLongPress: onLongPress,
-        child: Column(
-          crossAxisAlignment: isCurrentUser
-              ? CrossAxisAlignment.end
-              : CrossAxisAlignment.start,
+        child: Row(
+          // crossAxisAlignment: isCurrentUser
+          //     ? CrossAxisAlignment.end
+          //     : CrossAxisAlignment.start,
+          mainAxisAlignment: isCurrentUser
+              ? MainAxisAlignment.end
+              : MainAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (isReply) _buildQuotedReply(context),
+            if (isGroupChat && !isCurrentUser)
+              CircleAvatar(
+                radius: 20,
+                backgroundImage: senderPhotoURL != null
+                    ? CachedNetworkImageProvider(senderPhotoURL!)
+                    : null,
+                child: senderPhotoURL == null
+                    ? Text(senderName?[0].toUpperCase() ?? 'U')
+                    : null,
+              ),
+            if (isGroupChat && !isCurrentUser) const SizedBox(width: 8),
 
-            if (type == 'image')
-              _buildImageBubble(context)
-            else if (type == 'audio')
-              _buildAudioBubble(context) // New condition
-            else
-              _buildTextBubble(context),
+            Flexible(
+              child: Column(
+                crossAxisAlignment: isCurrentUser
+                    ? CrossAxisAlignment.end
+                    : CrossAxisAlignment.start,
+                children: [
+                  // Show sender's name in group chat
+                  if (isGroupChat && !isCurrentUser)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 12.0, bottom: 4.0),
+                      child: Text(
+                        senderName ?? "User",
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(context).primaryColor,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
 
-            // type == 'image'
-            //     ? _buildImageBubble(context)
-            //     : _buildTextBubble(context),
-            if (reactions.isNotEmpty) _buildReactionsDisplay(),
+                  if (isReply) _buildQuotedReply(context),
+
+                  if (type == 'image')
+                    _buildImageBubble(context)
+                  else if (type == 'audio')
+                    _buildAudioBubble(context) // New condition
+                  else
+                    _buildTextBubble(context),
+
+                  // type == 'image'
+                  //     ? _buildImageBubble(context)
+                  //     : _buildTextBubble(context),
+                  if (reactions.isNotEmpty) _buildReactionsDisplay(),
+                ],
+              ),
+            ),
           ],
         ),
       ),

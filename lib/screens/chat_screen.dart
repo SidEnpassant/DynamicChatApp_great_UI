@@ -36,7 +36,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   final ImagePicker _picker = ImagePicker();
 
   Timer? _typingTimer;
-  late String _chatEntityId; // can be roomId or groupId
+  late String _chatEntityId;
   Message? _replyingToMessage;
 
   @override
@@ -394,6 +394,10 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                 _replyingToMessage = message;
               });
             },
+
+            isGroupChat: widget.isGroupChat,
+            senderName: message.senderName,
+            senderPhotoURL: message.senderPhotoURL,
           ),
           Padding(
             padding: const EdgeInsets.symmetric(

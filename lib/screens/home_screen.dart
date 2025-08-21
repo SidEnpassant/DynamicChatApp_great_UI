@@ -153,6 +153,8 @@ class _HomeScreenState extends State<HomeScreen>
                   const Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.center,
+                  ),
+                  Row(
                     children: [
                       Text(
                         'Messages',
@@ -162,14 +164,7 @@ class _HomeScreenState extends State<HomeScreen>
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      Text(
-                        'Stay connected with friends',
-                        style: TextStyle(color: Colors.white70, fontSize: 14),
-                      ),
-                    ],
-                  ),
-                  Row(
-                    children: [
+                      SizedBox(width: 120),
                       IconButton(
                         icon: const Icon(
                           Icons.person_outline,

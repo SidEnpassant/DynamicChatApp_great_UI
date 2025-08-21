@@ -102,9 +102,19 @@ class ChatService {
     final String currentUserEmail = _auth.currentUser!.email!;
     final Timestamp timestamp = Timestamp.now();
 
+    final userDoc = await _firestore
+        .collection('users')
+        .doc(currentUserId)
+        .get();
+    final userData = userDoc.data() as Map<String, dynamic>;
+
     Message newMessage = Message(
       senderId: currentUserId,
       senderEmail: currentUserEmail,
+
+      senderName: userData['email'].toString().split('@')[0],
+      senderPhotoURL: userData['photoURL'],
+
       receiverId: receiverId,
       message: text ?? '',
       imageUrl: imageUrl,

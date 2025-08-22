@@ -62,7 +62,7 @@ class _HomeScreenState extends State<HomeScreen>
   @override
   void dispose() {
     _tabController.dispose();
-    _presenceService.updateUserStatus('Offline');
+    // _presenceService.updateUserStatus('Offline');
     WidgetsBinding.instance.removeObserver(this);
     _fadeController.dispose();
     super.dispose();

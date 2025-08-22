@@ -16,6 +16,8 @@ class Message {
   final String? replyingToMessage;
   final String? replyingToSender;
 
+  final Map<String, Timestamp> readBy;
+
   Message({
     required this.senderId,
     required this.senderEmail,
@@ -33,6 +35,8 @@ class Message {
     this.isReply = false,
     this.replyingToMessage,
     this.replyingToSender,
+
+    required this.readBy,
   });
 
   Map<String, dynamic> toMap() {
@@ -51,6 +55,8 @@ class Message {
       'isReply': isReply,
       'replyingToMessage': replyingToMessage,
       'replyingToSender': replyingToSender,
+
+      'readBy': readBy,
     };
   }
 
@@ -62,6 +68,15 @@ class Message {
         reactions[key] = List<String>.from(value);
       }
     });
+
+    final readByData = map['readBy'] as Map<String, dynamic>? ?? {};
+    final Map<String, Timestamp> readBy = {};
+    readByData.forEach((key, value) {
+      if (value is Timestamp) {
+        readBy[key] = value;
+      }
+    });
+
     return Message(
       senderId: map['senderId'],
       senderEmail: map['senderEmail'],
@@ -76,6 +91,7 @@ class Message {
       isReply: map['isReply'] ?? false,
       replyingToMessage: map['replyingToMessage'],
       replyingToSender: map['replyingToSender'],
+      readBy: readBy,
     );
   }
 }

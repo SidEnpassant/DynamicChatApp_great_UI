@@ -9,6 +9,9 @@ class GroupProfile {
   final String? lastMessage;
   final Timestamp? lastMessageTimestamp;
 
+  final String? description;
+  final List<String> admins;
+
   GroupProfile({
     required this.groupId,
     required this.groupName,
@@ -17,6 +20,9 @@ class GroupProfile {
     required this.members,
     this.lastMessage,
     this.lastMessageTimestamp,
+
+    this.description,
+    required this.admins,
   });
 
   factory GroupProfile.fromMap(Map<String, dynamic> map) {
@@ -28,8 +34,15 @@ class GroupProfile {
       members: List<String>.from(map['members'] ?? []),
       lastMessage: map['lastMessage'],
       lastMessageTimestamp: map['lastMessageTimestamp'],
+
+      description: map['description'],
+      admins: List<String>.from(map['admins'] ?? []),
     );
   }
+  factory GroupProfile.fromDocument(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    return GroupProfile.fromMap(data);
+  }
 
-  get name => null;
+  //get name => null;
 }

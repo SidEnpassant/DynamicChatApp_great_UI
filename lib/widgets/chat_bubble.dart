@@ -1,3 +1,4 @@
+import 'package:dynamichatapp/models/message.dart';
 import 'package:dynamichatapp/widgets/audio_player_bubble.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -19,6 +20,7 @@ class ChatBubble extends StatelessWidget {
   final bool isGroupChat;
   final String? senderName;
   final String? senderPhotoURL;
+  final int totalMembers;
 
   const ChatBubble({
     super.key,
@@ -37,10 +39,44 @@ class ChatBubble extends StatelessWidget {
     this.isGroupChat = false,
     this.senderName,
     this.senderPhotoURL,
+
+    this.totalMembers = 0,
   });
+
+  Widget _buildReadReceipt(BuildContext context, Message message) {
+    if (!isCurrentUser) return const SizedBox.shrink();
+
+    final bool allRead = message.readBy.length >= totalMembers;
+    final icon = allRead ? Icons.done_all : Icons.done;
+    final color = allRead ? Colors.blue : Colors.grey;
+
+    return Padding(
+      padding: const EdgeInsets.only(left: 8.0),
+      child: Icon(icon, size: 16, color: color),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (type == 'system') {
+      return Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          margin: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.grey[200],
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            message,
+            style: TextStyle(
+              color: Colors.grey[700],
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ),
+      );
+    }
     return Slidable(
       key: UniqueKey(),
       startActionPane: ActionPane(

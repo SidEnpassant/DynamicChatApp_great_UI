@@ -53,7 +53,6 @@ class _AddMembersScreenState extends State<AddMembersScreen> {
             return const Center(child: CircularProgressIndicator());
           }
 
-          // Filter out users who are already in the group
           final availableContacts = snapshot.data!
               .where((contact) => !widget.group.members.contains(contact.uid))
               .toList();

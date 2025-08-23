@@ -11,6 +11,7 @@ class GroupProfile {
 
   final String? description;
   final List<String> admins;
+  final Map<String, dynamic>? pinnedMessage;
 
   GroupProfile({
     required this.groupId,
@@ -23,6 +24,8 @@ class GroupProfile {
 
     this.description,
     required this.admins,
+
+    this.pinnedMessage,
   });
 
   factory GroupProfile.fromMap(Map<String, dynamic> map) {
@@ -37,6 +40,7 @@ class GroupProfile {
 
       description: map['description'],
       admins: List<String>.from(map['admins'] ?? []),
+      pinnedMessage: map['pinnedMessage'] as Map<String, dynamic>?,
     );
   }
   factory GroupProfile.fromDocument(DocumentSnapshot doc) {

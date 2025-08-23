@@ -1,4 +1,3 @@
-// lib/screens/create_group_screen.dart
 import 'package:flutter/material.dart';
 import '../models/user_profile.dart';
 import '../services/chat_service.dart';

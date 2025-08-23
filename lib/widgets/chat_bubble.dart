@@ -22,6 +22,8 @@ class ChatBubble extends StatelessWidget {
   final String? senderPhotoURL;
   final int totalMembers;
 
+  final bool isHighlighted;
+
   const ChatBubble({
     super.key,
     required this.message,
@@ -41,6 +43,8 @@ class ChatBubble extends StatelessWidget {
     this.senderPhotoURL,
 
     this.totalMembers = 0,
+
+    this.isHighlighted = false,
   });
 
   Widget _buildReadReceipt(BuildContext context, Message message) {
@@ -77,82 +81,92 @@ class ChatBubble extends StatelessWidget {
         ),
       );
     }
-    return Slidable(
-      key: UniqueKey(),
-      startActionPane: ActionPane(
-        motion: const StretchMotion(),
-        dismissible: DismissiblePane(onDismissed: () => onReply()),
-        children: [
-          SlidableAction(
-            onPressed: (_) => onReply(),
-            backgroundColor: Theme.of(context).primaryColor.withOpacity(0.1),
-            foregroundColor: Theme.of(context).primaryColor,
-            icon: Icons.reply,
-            label: 'Reply',
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ],
-      ),
-      child: GestureDetector(
-        onLongPress: onLongPress,
-        child: Row(
-          // crossAxisAlignment: isCurrentUser
-          //     ? CrossAxisAlignment.end
-          //     : CrossAxisAlignment.start,
-          mainAxisAlignment: isCurrentUser
-              ? MainAxisAlignment.end
-              : MainAxisAlignment.start,
-          crossAxisAlignment: CrossAxisAlignment.start,
+    final highlightDecoration = BoxDecoration(
+      color: Theme.of(context).primaryColor.withOpacity(0.2),
+      borderRadius: BorderRadius.circular(22),
+    );
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 500),
+      curve: Curves.easeInOut,
+      decoration: isHighlighted ? highlightDecoration : const BoxDecoration(),
+      padding: isHighlighted ? const EdgeInsets.all(4) : EdgeInsets.zero,
+      child: Slidable(
+        key: UniqueKey(),
+        startActionPane: ActionPane(
+          motion: const StretchMotion(),
+          dismissible: DismissiblePane(onDismissed: () => onReply()),
           children: [
-            if (isGroupChat && !isCurrentUser)
-              CircleAvatar(
-                radius: 20,
-                backgroundImage: senderPhotoURL != null
-                    ? CachedNetworkImageProvider(senderPhotoURL!)
-                    : null,
-                child: senderPhotoURL == null
-                    ? Text(senderName?[0].toUpperCase() ?? 'U')
-                    : null,
-              ),
-            if (isGroupChat && !isCurrentUser) const SizedBox(width: 8),
-
-            Flexible(
-              child: Column(
-                crossAxisAlignment: isCurrentUser
-                    ? CrossAxisAlignment.end
-                    : CrossAxisAlignment.start,
-                children: [
-                  // Show sender's name in group chat
-                  if (isGroupChat && !isCurrentUser)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 12.0, bottom: 4.0),
-                      child: Text(
-                        senderName ?? "User",
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Theme.of(context).primaryColor,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ),
-
-                  if (isReply) _buildQuotedReply(context),
-
-                  if (type == 'image')
-                    _buildImageBubble(context)
-                  else if (type == 'audio')
-                    _buildAudioBubble(context) // New condition
-                  else
-                    _buildTextBubble(context),
-
-                  // type == 'image'
-                  //     ? _buildImageBubble(context)
-                  //     : _buildTextBubble(context),
-                  if (reactions.isNotEmpty) _buildReactionsDisplay(),
-                ],
-              ),
+            SlidableAction(
+              onPressed: (_) => onReply(),
+              backgroundColor: Theme.of(context).primaryColor.withOpacity(0.1),
+              foregroundColor: Theme.of(context).primaryColor,
+              icon: Icons.reply,
+              label: 'Reply',
+              borderRadius: BorderRadius.circular(12),
             ),
           ],
+        ),
+        child: GestureDetector(
+          onLongPress: onLongPress,
+          child: Row(
+            // crossAxisAlignment: isCurrentUser
+            //     ? CrossAxisAlignment.end
+            //     : CrossAxisAlignment.start,
+            mainAxisAlignment: isCurrentUser
+                ? MainAxisAlignment.end
+                : MainAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (isGroupChat && !isCurrentUser)
+                CircleAvatar(
+                  radius: 20,
+                  backgroundImage: senderPhotoURL != null
+                      ? CachedNetworkImageProvider(senderPhotoURL!)
+                      : null,
+                  child: senderPhotoURL == null
+                      ? Text(senderName?[0].toUpperCase() ?? 'U')
+                      : null,
+                ),
+              if (isGroupChat && !isCurrentUser) const SizedBox(width: 8),
+
+              Flexible(
+                child: Column(
+                  crossAxisAlignment: isCurrentUser
+                      ? CrossAxisAlignment.end
+                      : CrossAxisAlignment.start,
+                  children: [
+                    // Show sender's name in group chat
+                    if (isGroupChat && !isCurrentUser)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 12.0, bottom: 4.0),
+                        child: Text(
+                          senderName ?? "User",
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Theme.of(context).primaryColor,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+
+                    if (isReply) _buildQuotedReply(context),
+
+                    if (type == 'image')
+                      _buildImageBubble(context)
+                    else if (type == 'audio')
+                      _buildAudioBubble(context) // New condition
+                    else
+                      _buildTextBubble(context),
+
+                    // type == 'image'
+                    //     ? _buildImageBubble(context)
+                    //     : _buildTextBubble(context),
+                    if (reactions.isNotEmpty) _buildReactionsDisplay(),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -251,7 +265,113 @@ class ChatBubble extends StatelessWidget {
     );
   }
 
+  // Widget _buildTextBubble(BuildContext context) {
+  //   // We wrap the bubble in a Row to control its alignment and width.
+  //   return Row(
+  //     mainAxisSize:
+  //         MainAxisSize.min, // The Row should only be as wide as its children
+  //     mainAxisAlignment: isCurrentUser
+  //         ? MainAxisAlignment.end
+  //         : MainAxisAlignment.start,
+  //     children: [
+  //       Flexible(
+  //         // Flexible allows the container to shrink and not force the Row to be full width.
+  //         child: Container(
+  //           // Your existing beautiful decoration for the bubble
+  //           decoration: BoxDecoration(
+  //             gradient: isCurrentUser
+  //                 ? LinearGradient(
+  //                     colors: [
+  //                       Theme.of(context).primaryColor,
+  //                       Theme.of(context).primaryColor.withOpacity(0.8),
+  //                     ],
+  //                     begin: Alignment.topLeft,
+  //                     end: Alignment.bottomRight,
+  //                   )
+  //                 : LinearGradient(
+  //                     colors: [Colors.white, Colors.grey[50]!],
+  //                     begin: Alignment.topLeft,
+  //                     end: Alignment.bottomRight,
+  //                   ),
+  //             borderRadius: BorderRadius.only(
+  //               topLeft: const Radius.circular(20),
+  //               topRight: const Radius.circular(20),
+  //               bottomLeft: isCurrentUser
+  //                   ? const Radius.circular(20)
+  //                   : const Radius.circular(4),
+  //               bottomRight: isCurrentUser
+  //                   ? const Radius.circular(4)
+  //                   : const Radius.circular(20),
+  //             ),
+  //             boxShadow: [
+  //               BoxShadow(
+  //                 color: isCurrentUser
+  //                     ? Theme.of(context).primaryColor.withOpacity(0.3)
+  //                     : Colors.black.withOpacity(0.1),
+  //                 blurRadius: 8,
+  //                 offset: const Offset(0, 2),
+  //               ),
+  //             ],
+  //             border: !isCurrentUser
+  //                 ? Border.all(color: Colors.grey[200]!, width: 1)
+  //                 : null,
+  //           ),
+  //           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+  //           // We no longer need margins here as the alignment is handled by the Row.
+  //           child: Text(
+  //             message,
+  //             style: TextStyle(
+  //               color: isCurrentUser ? Colors.white : Colors.black87,
+  //               fontSize: 16,
+  //               fontWeight: FontWeight.w400,
+  //               height: 1.4,
+  //             ),
+  //           ),
+  //         ),
+  //       ),
+  //     ],
+  //   );
+  // }
+
   Widget _buildTextBubble(BuildContext context) {
+    // --- Start: New Mention Parsing Logic ---
+    final List<TextSpan> textSpans = [];
+    // This RegExp looks for the pattern generated by the flutter_mentions package.
+    final RegExp mentionRegex = RegExp(r"\[__.*?__\]\(__(\w+)__\)");
+
+    // We use splitMapJoin to separate the normal text from the mentions
+    message.splitMapJoin(
+      mentionRegex,
+      onMatch: (m) {
+        // This is a placeholder for the user's display name.
+        // A full implementation would fetch the name based on the ID.
+        final String displayName = m
+            .group(0)!
+            .split('__](')
+            .first
+            .replaceAll('[__', '');
+
+        textSpans.add(
+          TextSpan(
+            text: '@$displayName', // Display the mention with an '@'
+            style: TextStyle(
+              color: isCurrentUser
+                  ? Colors.cyanAccent
+                  : Theme.of(context).primaryColorDark,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        );
+        return ""; // Return an empty string for the matched part
+      },
+      onNonMatch: (n) {
+        // This is the normal text that is not a mention
+        textSpans.add(TextSpan(text: n));
+        return ""; // Return an empty string for the non-matched part
+      },
+    );
+    // --- End: New Mention Parsing Logic ---
+
     // We wrap the bubble in a Row to control its alignment and width.
     return Row(
       mainAxisSize:
@@ -303,14 +423,16 @@ class ChatBubble extends StatelessWidget {
                   : null,
             ),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            // We no longer need margins here as the alignment is handled by the Row.
-            child: Text(
-              message,
-              style: TextStyle(
-                color: isCurrentUser ? Colors.white : Colors.black87,
-                fontSize: 16,
-                fontWeight: FontWeight.w400,
-                height: 1.4,
+            // We use RichText here instead of a simple Text widget
+            child: RichText(
+              text: TextSpan(
+                style: TextStyle(
+                  color: isCurrentUser ? Colors.white : Colors.black87,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w400,
+                  height: 1.4,
+                ),
+                children: textSpans,
               ),
             ),
           ),

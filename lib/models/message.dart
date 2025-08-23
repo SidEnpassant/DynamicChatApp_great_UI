@@ -17,6 +17,9 @@ class Message {
   final String? replyingToSender;
 
   final Map<String, Timestamp> readBy;
+  final List<String> mentionedUsers;
+
+  final String? id;
 
   Message({
     required this.senderId,
@@ -37,6 +40,9 @@ class Message {
     this.replyingToSender,
 
     required this.readBy,
+    this.id,
+
+    this.mentionedUsers = const [],
   });
 
   Map<String, dynamic> toMap() {
@@ -57,10 +63,11 @@ class Message {
       'replyingToSender': replyingToSender,
 
       'readBy': readBy,
+      'mentionedUsers': mentionedUsers,
     };
   }
 
-  factory Message.fromMap(Map<String, dynamic> map) {
+  factory Message.fromMap(Map<String, dynamic> map, String id) {
     final reactionsData = map['reactions'] as Map<String, dynamic>? ?? {};
     final Map<String, List<String>> reactions = {};
     reactionsData.forEach((key, value) {
@@ -92,6 +99,9 @@ class Message {
       replyingToMessage: map['replyingToMessage'],
       replyingToSender: map['replyingToSender'],
       readBy: readBy,
+
+      id: id,
+      mentionedUsers: List<String>.from(map['mentionedUsers'] ?? []),
     );
   }
 }

@@ -35,7 +35,6 @@ class UserProfile {
     );
   }
 
-  // ✅ Add this so List.contains() works properly
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||

@@ -34,7 +34,7 @@ class _HomeScreenState extends State<HomeScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    _tabController.addListener(() => setState(() {})); // To update FAB icon
+    _tabController.addListener(() => setState(() {}));
 
     WidgetsBinding.instance.addObserver(this);
     _presenceService.updateUserStatus('Online');
@@ -62,7 +62,6 @@ class _HomeScreenState extends State<HomeScreen>
   @override
   void dispose() {
     _tabController.dispose();
-    // _presenceService.updateUserStatus('Offline');
     WidgetsBinding.instance.removeObserver(this);
     _fadeController.dispose();
     super.dispose();
@@ -444,7 +443,6 @@ class _HomeScreenState extends State<HomeScreen>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // --- THIS IS THE FIX ---
                       Text(
                         group.groupName,
                         style: const TextStyle(

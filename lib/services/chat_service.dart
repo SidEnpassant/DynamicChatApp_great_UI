@@ -29,6 +29,14 @@ class ChatService {
     return null;
   }
 
+  Future<UserProfile?> getUserProfile(String uid) async {
+    final doc = await _firestore.collection('users').doc(uid).get();
+    if (doc.exists) {
+      return UserProfile.fromMap(doc.data()!);
+    }
+    return null;
+  }
+
   Future<void> addContact(UserProfile contact) async {
     final currentUser = _auth.currentUser!;
 
@@ -96,6 +104,8 @@ class ChatService {
     String? imageUrl,
     Message? repliedToMessage,
     required bool isGroup,
+    // List<UserProfile>? mentionedUsers,
+    List<String>? mentionedUserIds,
   }) async {
     if (text == null && imageUrl == null) return;
 
@@ -130,20 +140,48 @@ class ChatService {
       replyingToSender: repliedToMessage?.senderEmail,
 
       readBy: {currentUserId: Timestamp.now()},
+
+      mentionedUsers: mentionedUserIds ?? [],
     );
 
     if (isGroup) {
-      // 📌 Save in "groups/{groupId}/messages"
       await _firestore
           .collection('groups')
           .doc(receiverId)
           .collection('messages')
           .add(newMessage.toMap());
 
-      await _firestore.collection('groups').doc(receiverId).update({
-        'lastMessage': text ?? "Sent an image",
-        'lastMessageTimestamp': Timestamp.now(),
-      });
+      // 📌 Save in "groups/{groupId}/messages"
+      // if (mentionedUsers != null && mentionedUsers.isNotEmpty) {
+      //   await _sendMentionNotification(
+      //     groupName:
+      //         (await _firestore.collection('groups').doc(receiverId).get())
+      //             .data()!['groupName'],
+      //     mentionedUsers: mentionedUsers,
+      //     senderName: userData['email'].toString().split('@')[0],
+      //     message: text ?? "Sent an image.",
+      //   );
+      // }
+      if (mentionedUserIds != null && mentionedUserIds.isNotEmpty) {
+        await _sendMentionNotification(
+          groupName:
+              (await _firestore.collection('groups').doc(receiverId).get())
+                  .data()!['groupName'],
+          mentionedUserIds: mentionedUserIds,
+          senderName: userData['email'].toString().split('@')[0],
+          message: text ?? "Sent an image.",
+        );
+      }
+      // await _firestore
+      //     .collection('groups')
+      //     .doc(receiverId)
+      //     .collection('messages')
+      //     .add(newMessage.toMap());
+
+      // await _firestore.collection('groups').doc(receiverId).update({
+      //   'lastMessage': text ?? "Sent an image",
+      //   'lastMessageTimestamp': Timestamp.now(),
+      // });
     } else {
       // 📌 Private chat (chat_rooms)
       List<String> ids = [currentUserId, receiverId];
@@ -165,7 +203,35 @@ class ChatService {
     }
   }
 
-  Future<void> toggleMessageReaction(
+  Future<void> _sendMentionNotification({
+    required String groupName,
+    // required List<UserProfile> mentionedUsers,
+    required List<String> mentionedUserIds,
+    required String senderName,
+    required String message,
+  }) async {
+    // final List<String> mentionedUserIds = mentionedUsers
+    //     .map((e) => e.uid)
+    //     .toList();
+
+    // You would typically use your notification service here.
+    // For now, we will print to the console.
+    print("Sending mention notification to: $mentionedUserIds");
+    print("Message: '$senderName mentioned you in $groupName: $message'");
+
+    // Example of how you might integrate with OneSignal:
+    // final body = {
+    //   "app_id": "YOUR_ONESIGNAL_APP_ID",
+    //   "include_external_user_ids": mentionedUserIds,
+    //   "headings": {"en": "You were mentioned in $groupName"},
+    //   "contents": {"en": "$senderName: $message"},
+    //   "android_group": "chat_app_mentions", // Use a different group for mentions
+    // };
+    // ... http post request ...
+  }
+
+  // Separate function for personal chat reactions
+  Future<void> togglePersonalMessageReaction(
     String chatRoomId,
     String messageId,
     String emoji,
@@ -174,6 +240,53 @@ class ChatService {
     final messageRef = _firestore
         .collection('chat_rooms')
         .doc(chatRoomId)
+        .collection('messages')
+        .doc(messageId);
+
+    await _firestore.runTransaction((transaction) async {
+      final snapshot = await transaction.get(messageRef);
+
+      if (!snapshot.exists) {
+        throw Exception("Message does not exist!");
+      }
+
+      Map<String, List<String>> reactions = Map<String, List<String>>.from(
+        (snapshot.data()!['reactions'] as Map<String, dynamic>? ?? {}).map(
+          (key, value) => MapEntry(key, List<String>.from(value)),
+        ),
+      );
+
+      String? previousReaction;
+
+      reactions.forEach((key, userList) {
+        if (userList.contains(currentUserId)) {
+          previousReaction = key;
+          userList.remove(currentUserId);
+        }
+      });
+
+      reactions.removeWhere((key, userList) => userList.isEmpty);
+
+      if (previousReaction != emoji) {
+        List<String> newUserList = reactions[emoji] ?? [];
+        newUserList.add(currentUserId);
+        reactions[emoji] = newUserList;
+      }
+
+      transaction.update(messageRef, {'reactions': reactions});
+    });
+  }
+
+  // Separate function for group chat reactions
+  Future<void> toggleGroupMessageReaction(
+    String groupId,
+    String messageId,
+    String emoji,
+  ) async {
+    final currentUserId = _auth.currentUser!.uid;
+    final messageRef = _firestore
+        .collection('groups')
+        .doc(groupId)
         .collection('messages')
         .doc(messageId);
 
@@ -345,6 +458,24 @@ class ChatService {
     } on FirebaseException catch (e) {
       print("Group read receipt error: ${e.message}");
     }
+  }
+
+  Future<void> pinMessage(GroupProfile group, Message message) async {
+    final pinnedMessageData = {
+      'messageId': message.id,
+      'message': message.message,
+      'senderName': message.senderName ?? message.senderEmail.split('@')[0],
+      'type': message.type,
+    };
+    await _firestore.collection('groups').doc(group.groupId).update({
+      'pinnedMessage': pinnedMessageData,
+    });
+  }
+
+  Future<void> unpinMessage(GroupProfile group) async {
+    await _firestore.collection('groups').doc(group.groupId).update({
+      'pinnedMessage': FieldValue.delete(), // Deletes the field
+    });
   }
 
   Future<void> markPersonalMessageAsRead(

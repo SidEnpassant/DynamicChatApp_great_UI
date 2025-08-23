@@ -48,31 +48,24 @@ class AuthService {
     required PhoneAuthCredential credential,
   }) async {
     try {
-      // Step 1: Create the user with email and password
       UserCredential userCredential = await _auth
           .createUserWithEmailAndPassword(email: email, password: password);
 
-      // Step 2: Link the verified phone number to the new account
       await userCredential.user!.linkWithCredential(credential);
 
-      // Step 3: Reload the user to get the newly linked phone number
       await userCredential.user!.reload();
       final freshUser = _auth.currentUser;
 
-      // Step 4: Save user info to Firestore with the correct phone number
       await _firestore.collection('users').doc(userCredential.user!.uid).set({
         'uid': userCredential.user!.uid,
         'email': email,
-        // --- THIS IS THE FIX ---
-        // Use the phone number from the reloaded user object
+
         'phoneNumber': freshUser?.phoneNumber,
-        // -----------------------
         'photoURL': null,
         'status': 'Online',
         'lastSeen': Timestamp.now(),
       });
 
-      // Step 5: Associate with OneSignal
       OneSignal.login(userCredential.user!.uid);
 
       return userCredential;

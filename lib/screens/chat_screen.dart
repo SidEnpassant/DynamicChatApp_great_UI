@@ -1789,6 +1789,26 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     });
   }
 
+  // void _markVisibleMessagesAsRead(List<QueryDocumentSnapshot> messages) {
+  //   for (var doc in messages) {
+  //     final message = Message.fromMap(doc.data() as Map<String, dynamic>);
+  //     final isReadByCurrentUser = message.readBy.containsKey(
+  //       _authService.getCurrentUser()!.uid,
+  //     );
+
+  //     if (message.senderId != _authService.getCurrentUser()!.uid &&
+  //         !isReadByCurrentUser) {
+  //       _chatService.markMessageAsRead(
+  //         _chatEntityId,
+  //         doc.id,
+  //         widget.isGroupChat,
+  //       );
+  //     }
+  //   }
+  // }
+
+  // ... inside the _ChatScreenState class
+
   void _markVisibleMessagesAsRead(List<QueryDocumentSnapshot> messages) {
     for (var doc in messages) {
       final message = Message.fromMap(doc.data() as Map<String, dynamic>);
@@ -1798,11 +1818,14 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
       if (message.senderId != _authService.getCurrentUser()!.uid &&
           !isReadByCurrentUser) {
-        _chatService.markMessageAsRead(
-          _chatEntityId,
-          doc.id,
-          widget.isGroupChat,
-        );
+        // --- THIS IS THE FIX ---
+        // Use an if/else block to call the correct, dedicated function
+        if (widget.isGroupChat) {
+          _chatService.markGroupMessageAsRead(_chatEntityId, doc.id);
+        } else {
+          _chatService.markPersonalMessageAsRead(_chatEntityId, doc.id);
+        }
+        // -----------------------
       }
     }
   }
@@ -2216,26 +2239,59 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   }
 
   // --- THIS IS THE FINAL FIX FOR THE BLUE TICKS ---
+  // Widget _buildReadReceipt(Message message) {
+  //   if (message.senderId != _authService.getCurrentUser()!.uid)
+  //     return const SizedBox.shrink();
+
+  //   bool isSeenByReceiver;
+
+  //   if (widget.isGroupChat) {
+  //     final totalMembers = widget.group?.members.length ?? 0;
+  //     isSeenByReceiver =
+  //         totalMembers > 1 && message.readBy.length >= totalMembers;
+  //   } else {
+  //     // For one-on-one chat, just check if the receiver's ID is in the readBy map
+  //     isSeenByReceiver = message.readBy.containsKey(widget.receiver!.uid);
+  //   }
+
+  //   final icon = isSeenByReceiver ? Icons.done_all : Icons.done;
+  //   final color = isSeenByReceiver ? Colors.blueAccent : Colors.grey;
+
+  //   return GestureDetector(
+  //     onTap: () {
+  //       if (widget.isGroupChat) {
+  //         _showSeenByDialog(context, message);
+  //       }
+  //     },
+  //     child: Icon(icon, size: 18, color: color),
+  //   );
+  // }
+
+  // --- THIS IS THE FINAL AND CORRECT WIDGET ---
   Widget _buildReadReceipt(Message message) {
+    // It should not show a receipt for messages you've received.
     if (message.senderId != _authService.getCurrentUser()!.uid)
       return const SizedBox.shrink();
 
     bool isSeenByReceiver;
 
     if (widget.isGroupChat) {
+      // For groups, check if the number of reads is equal to or greater than the number of members.
       final totalMembers = widget.group?.members.length ?? 0;
       isSeenByReceiver =
           totalMembers > 1 && message.readBy.length >= totalMembers;
     } else {
-      // For one-on-one chat, just check if the receiver's ID is in the readBy map
+      // For one-on-one chats, simply check if the receiver's ID is in the `readBy` map.
       isSeenByReceiver = message.readBy.containsKey(widget.receiver!.uid);
     }
 
+    // Determine the icon and color based on the seen status.
     final icon = isSeenByReceiver ? Icons.done_all : Icons.done;
     final color = isSeenByReceiver ? Colors.blueAccent : Colors.grey;
 
     return GestureDetector(
       onTap: () {
+        // The "Seen By" details dialog is only for group chats.
         if (widget.isGroupChat) {
           _showSeenByDialog(context, message);
         }

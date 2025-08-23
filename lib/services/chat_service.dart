@@ -305,29 +305,63 @@ class ChatService {
   // ============================================================
   // =============== NEW GROUP CHAT FEATURES ====================
   // ============================================================
-  Future<void> markMessageAsRead(
-    String groupId,
-    String messageId,
-    bool isGroupChat,
-  ) async {
-    final currentUserId = _auth.currentUser!.uid;
+  // Future<void> markMessageAsRead(
+  //   String groupId,
+  //   String messageId,
+  //   bool isGroupChat,
+  // ) async {
+  //   final currentUserId = _auth.currentUser!.uid;
 
-    final collectionPath = isGroupChat ? 'groups' : 'chat_rooms';
+  //   final collectionPath = isGroupChat ? 'groups' : 'chat_rooms';
+  //   final messageRef = _firestore
+  //       .collection('groups')
+  //       .doc(groupId)
+  //       .collection('messages')
+  //       .doc(messageId);
+
+  //   // Use dot notation for updating a specific field in a map
+  //   // await messageRef.update({'readBy.$currentUserId': Timestamp.now()});
+  //   try {
+  //     // This update only writes the timestamp if the user's ID is not already a key in the map.
+  //     // This is efficient and prevents unnecessary writes.
+  //     await messageRef.update({'readBy.$currentUserId': Timestamp.now()});
+  //   } on FirebaseException catch (e) {
+  //     // This will help you debug if the error persists by showing exactly what path is failing.
+  //     print("Permission denied on path: ${messageRef.path}");
+  //     print("Error: ${e.message}");
+  //   }
+  // }
+
+  Future<void> markGroupMessageAsRead(String groupId, String messageId) async {
+    final currentUserId = _auth.currentUser!.uid;
     final messageRef = _firestore
         .collection('groups')
         .doc(groupId)
         .collection('messages')
         .doc(messageId);
 
-    // Use dot notation for updating a specific field in a map
-    // await messageRef.update({'readBy.$currentUserId': Timestamp.now()});
     try {
-      // This update only writes the timestamp if the user's ID is not already a key in the map.
-      // This is efficient and prevents unnecessary writes.
       await messageRef.update({'readBy.$currentUserId': Timestamp.now()});
     } on FirebaseException catch (e) {
-      // This will help you debug if the error persists by showing exactly what path is failing.
-      print("Permission denied on path: ${messageRef.path}");
+      print("Group read receipt error: ${e.message}");
+    }
+  }
+
+  Future<void> markPersonalMessageAsRead(
+    String chatRoomId,
+    String messageId,
+  ) async {
+    final currentUserId = _auth.currentUser!.uid;
+    final messageRef = _firestore
+        .collection('chat_rooms')
+        .doc(chatRoomId)
+        .collection('messages')
+        .doc(messageId);
+
+    try {
+      await messageRef.update({'readBy.$currentUserId': Timestamp.now()});
+    } on FirebaseException catch (e) {
+      print("Personal read receipt error on path: ${messageRef.path}");
       print("Error: ${e.message}");
     }
   }

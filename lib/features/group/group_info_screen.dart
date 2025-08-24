@@ -1,10 +1,10 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:dynamichatapp/models/group_profile.dart';
-import 'package:dynamichatapp/models/user_profile.dart';
-import 'package:dynamichatapp/screens/add_members_screen.dart';
-import 'package:dynamichatapp/screens/home_screen.dart';
-import 'package:dynamichatapp/services/chat_service.dart';
+import 'package:dynamichatapp/shared/models/group_profile.dart';
+import 'package:dynamichatapp/shared/models/user_profile.dart';
+import 'package:dynamichatapp/features/group/add_members_screen.dart';
+import 'package:dynamichatapp/features/chat/home_screen.dart';
+import 'package:dynamichatapp/shared/services/chat_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';

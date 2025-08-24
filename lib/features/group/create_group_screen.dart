@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import '../models/user_profile.dart';
-import '../services/chat_service.dart';
-import '../widgets/custom_textfield.dart';
+import '../../shared/models/user_profile.dart';
+import '../../shared/services/chat_service.dart';
+import '../../shared/widgets/custom_textfield.dart';
 
 class CreateGroupScreen extends StatefulWidget {
   const CreateGroupScreen({super.key});

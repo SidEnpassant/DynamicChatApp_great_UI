@@ -2,19 +2,21 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:dynamichatapp/OneSignalAppCredentials.dart';
-import 'package:dynamichatapp/models/user_profile.dart';
-import 'package:dynamichatapp/models/group_profile.dart';
+import 'package:dynamichatapp/core/config/OneSignalAppCredentials.dart';
+import 'package:dynamichatapp/shared/models/user_profile.dart';
+import 'package:dynamichatapp/shared/models/group_profile.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import '../models/message.dart';
+import 'e2ee_service.dart';
 
 class ChatService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseStorage _storage = FirebaseStorage.instance;
+  final E2EEService _e2eeService = E2EEService();
 
   Future<UserProfile?> searchUserByPhoneNumber(String phoneNumber) async {
     final querySnapshot = await _firestore
@@ -40,10 +42,8 @@ class ChatService {
   Future<void> addContact(UserProfile contact) async {
     final currentUser = _auth.currentUser!;
 
-    final currentUserDoc = await _firestore
-        .collection('users')
-        .doc(currentUser.uid)
-        .get();
+    final currentUserDoc =
+        await _firestore.collection('users').doc(currentUser.uid).get();
     final currentUserProfile = UserProfile.fromMap(
       currentUserDoc.data() as Map<String, dynamic>,
     );
@@ -71,8 +71,8 @@ class ChatService {
         .collection('contacts')
         .snapshots()
         .map((snapshot) {
-          return snapshot.docs.map((doc) => doc.id).toList();
-        });
+      return snapshot.docs.map((doc) => doc.id).toList();
+    });
   }
 
   Stream<List<UserProfile>> getContactsProfilesStream() {
@@ -83,10 +83,10 @@ class ChatService {
         .collection('contacts')
         .snapshots()
         .map((snapshot) {
-          return snapshot.docs
-              .map((doc) => UserProfile.fromMap(doc.data()))
-              .toList();
-        });
+      return snapshot.docs
+          .map((doc) => UserProfile.fromMap(doc.data()))
+          .toList();
+    });
   }
 
   Stream<List<Map<String, dynamic>>> getUsersStream() {
@@ -116,21 +116,154 @@ class ChatService {
     final String currentUserEmail = _auth.currentUser!.email!;
     final Timestamp timestamp = Timestamp.now();
 
-    final userDoc = await _firestore
-        .collection('users')
-        .doc(currentUserId)
-        .get();
+    final userDoc =
+        await _firestore.collection('users').doc(currentUserId).get();
     final userData = userDoc.data() as Map<String, dynamic>;
+
+    // E2EE: Encrypt text message for private chats AND group chats
+    String? encryptedText = text;
+    Map<String, dynamic>? e2eeData;
+
+    if (text != null) {
+      if (isGroup) {
+        // E2EE for GROUP chats
+        try {
+          // Check if group E2EE is enabled
+          final groupE2EEEnabled =
+              await _e2eeService.isGroupE2EEEnabled(receiverId);
+
+          if (groupE2EEEnabled) {
+            // Try to encrypt the message
+            try {
+              e2eeData =
+                  await _e2eeService.encryptGroupMessage(text, receiverId);
+              encryptedText =
+                  '[ENCRYPTED]'; // Placeholder for encrypted content
+              print('Group E2EE encryption successful');
+            } catch (encryptError) {
+              print('Group E2EE encryption failed: $encryptError');
+              // Continue with unencrypted message if encryption fails
+              encryptedText = text; // Use original text
+              e2eeData = null;
+            }
+          } else {
+            // Try to auto-enable E2EE for the group if not enabled
+            try {
+              print('Auto-enabling E2EE for group...');
+              // Get group members
+              final groupDoc =
+                  await _firestore.collection('groups').doc(receiverId).get();
+              final groupData = groupDoc.data();
+              if (groupData != null) {
+                final memberIds = List<String>.from(groupData['members'] ?? []);
+                await _e2eeService.initializeGroupE2EE(receiverId, memberIds);
+                print('Group E2EE auto-enabled');
+
+                // Now try encryption again
+                try {
+                  e2eeData =
+                      await _e2eeService.encryptGroupMessage(text, receiverId);
+                  encryptedText = '[ENCRYPTED]';
+                  print('Group E2EE encryption successful after auto-enable');
+                } catch (encryptError) {
+                  print(
+                      'Group E2EE encryption failed after auto-enable: $encryptError');
+                  encryptedText = text;
+                  e2eeData = null;
+                }
+              } else {
+                print('Group data not found - sending unencrypted');
+                encryptedText = text;
+              }
+            } catch (autoEnableError) {
+              print('Failed to auto-enable group E2EE: $autoEnableError');
+              encryptedText = text;
+            }
+          }
+        } catch (e) {
+          print('Group E2EE check failed: $e - sending unencrypted message');
+          // Continue with unencrypted message if E2EE check fails
+          encryptedText = text; // Use original text
+          e2eeData = null;
+        }
+      } else {
+        // E2EE for PRIVATE chats (existing logic)
+        try {
+          // Check if E2EE is enabled for both users
+          final senderE2EEEnabled = await _e2eeService.isE2EEEnabled();
+          final recipientE2EEEnabled =
+              await _e2eeService.getUserE2EEStatus(receiverId);
+
+          print(
+              'E2EE Status - Sender: $senderE2EEEnabled, Recipient: $recipientE2EEEnabled');
+
+          if (senderE2EEEnabled && recipientE2EEEnabled) {
+            // Try to encrypt the message
+            try {
+              e2eeData = await _e2eeService.encryptMessage(text, receiverId);
+              encryptedText =
+                  '[ENCRYPTED]'; // Placeholder for encrypted content
+              print('E2EE encryption successful');
+            } catch (encryptError) {
+              print('E2EE encryption failed: $encryptError');
+              // Continue with unencrypted message if encryption fails
+              encryptedText = text; // Use original text
+              e2eeData = null;
+            }
+          } else {
+            // Try to auto-enable E2EE for sender if not enabled
+            if (!senderE2EEEnabled) {
+              try {
+                print('Auto-enabling E2EE for sender...');
+                await _e2eeService.initializeE2EE();
+                print('E2EE auto-enabled for sender');
+
+                // Check recipient again after enabling sender
+                final updatedRecipientE2EEEnabled =
+                    await _e2eeService.getUserE2EEStatus(receiverId);
+
+                if (updatedRecipientE2EEEnabled) {
+                  // Now both users have E2EE enabled, try encryption
+                  try {
+                    e2eeData =
+                        await _e2eeService.encryptMessage(text, receiverId);
+                    encryptedText = '[ENCRYPTED]';
+                    print('E2EE encryption successful after auto-enable');
+                  } catch (encryptError) {
+                    print(
+                        'E2EE encryption failed after auto-enable: $encryptError');
+                    encryptedText = text;
+                    e2eeData = null;
+                  }
+                } else {
+                  print('Recipient E2EE not enabled - sending unencrypted');
+                  encryptedText = text;
+                }
+              } catch (autoEnableError) {
+                print('Failed to auto-enable E2EE: $autoEnableError');
+                encryptedText = text;
+              }
+            } else {
+              print('E2EE not enabled for both users - sending unencrypted');
+              encryptedText = text; // Use original text
+            }
+          }
+        } catch (e) {
+          print('E2EE check failed: $e - sending unencrypted message');
+          // Continue with unencrypted message if E2EE check fails
+          encryptedText = text; // Use original text
+          e2eeData = null;
+        }
+      }
+    }
 
     Message newMessage = Message(
       senderId: currentUserId,
       senderEmail: currentUserEmail,
-
       senderName: userData['email'].toString().split('@')[0],
       senderPhotoURL: userData['photoURL'],
-
       receiverId: receiverId,
-      message: text ?? '',
+      message: encryptedText ?? '',
       imageUrl: imageUrl,
       type: imageUrl != null ? 'image' : 'text',
       timestamp: timestamp,
@@ -138,18 +271,23 @@ class ChatService {
       isReply: repliedToMessage != null,
       replyingToMessage: repliedToMessage?.message,
       replyingToSender: repliedToMessage?.senderEmail,
-
       readBy: {currentUserId: Timestamp.now()},
-
       mentionedUsers: mentionedUserIds ?? [],
     );
 
     if (isGroup) {
+      // Add E2EE data to group message if available
+      final messageData = newMessage.toMap();
+      if (e2eeData != null) {
+        messageData['e2eeData'] = e2eeData;
+        messageData['encrypted'] = true;
+      }
+
       await _firestore
           .collection('groups')
           .doc(receiverId)
           .collection('messages')
-          .add(newMessage.toMap());
+          .add(messageData);
 
       // 📌 Save in "groups/{groupId}/messages"
       // if (mentionedUsers != null && mentionedUsers.isNotEmpty) {
@@ -188,11 +326,18 @@ class ChatService {
       ids.sort();
       String chatRoomId = ids.join('_');
 
+      // Add E2EE data to message if available
+      final messageData = newMessage.toMap();
+      if (e2eeData != null) {
+        messageData['e2eeData'] = e2eeData;
+        messageData['encrypted'] = true;
+      }
+
       await _firestore
           .collection('chat_rooms')
           .doc(chatRoomId)
           .collection('messages')
-          .add(newMessage.toMap());
+          .add(messageData);
 
       await _sendOneSignalNotification(
         receiverId: receiverId,
@@ -345,9 +490,8 @@ class ChatService {
     const String oneSignalAppId = OnesignalappCredentials.OneSignalId;
     const String oneSignalRestApiKey = OnesignalappCredentials.OneSignaAPI_KEY;
 
-    final String notificationContent = imageUrl != null
-        ? "Sent you an image."
-        : message!;
+    final String notificationContent =
+        imageUrl != null ? "Sent you an image." : message!;
 
     final body = {
       "app_id": oneSignalAppId,
@@ -377,17 +521,122 @@ class ChatService {
     }
   }
 
-  Stream<QuerySnapshot> getMessages(String userId, String otherUserId) {
-    List<String> ids = [userId, otherUserId];
-    ids.sort();
-    String chatRoomId = ids.join('_');
+  /// Decrypt E2EE message if it's encrypted
+  Future<String> decryptMessageIfNeeded(
+      Map<String, dynamic> messageData) async {
+    try {
+      print('DEBUG: decryptMessageIfNeeded called');
+      print('DEBUG: messageData keys: ${messageData.keys.toList()}');
+      print('DEBUG: encrypted field: ${messageData['encrypted']}');
+      print('DEBUG: e2eeData field: ${messageData['e2eeData']}');
 
-    return _firestore
-        .collection('chat_rooms')
-        .doc(chatRoomId)
-        .collection('messages')
-        .orderBy('timestamp', descending: false)
-        .snapshots();
+      // Check if message is encrypted
+      if (messageData['encrypted'] == true && messageData['e2eeData'] != null) {
+        print('DEBUG: Message is encrypted, proceeding with decryption');
+
+        final e2eeData = messageData['e2eeData'] as Map<String, dynamic>;
+
+        // Debug: Print the e2eeData structure to understand what we're working with
+        print('DEBUG: e2eeData keys: ${e2eeData.keys.toList()}');
+        print('DEBUG: e2eeData values: ${e2eeData.values.toList()}');
+
+        // Check if this is a group message or personal message
+        final isGroupMessage = e2eeData['isGroupMessage'] == true;
+        print('DEBUG: isGroupMessage: $isGroupMessage');
+
+        if (isGroupMessage) {
+          print('DEBUG: Processing as GROUP message');
+          // Handle group message decryption
+          try {
+            final result = await _e2eeService.decryptGroupMessage(e2eeData);
+            print('DEBUG: Group decryption successful: $result');
+            return result;
+          } catch (e) {
+            print('DEBUG: Group E2EE decryption failed: $e');
+            return messageData['message'] ?? '[Group decryption failed]';
+          }
+        } else {
+          print('DEBUG: Processing as PERSONAL message');
+          // Handle personal message decryption (existing logic)
+          // Check if all required fields exist and are not null
+          final requiredFields = [
+            'encryptedMessage',
+            'iv',
+            'encryptedSessionKey',
+            'sessionKeyIV',
+            'signature',
+            'recipientPublicKey'
+          ];
+
+          for (final field in requiredFields) {
+            if (e2eeData[field] == null) {
+              print('DEBUG: Missing or null field: $field');
+              return messageData['message'] ??
+                  '[Decryption failed - missing field: $field]';
+            }
+          }
+
+          // Convert e2eeData to the format expected by decryptMessage
+          final cryptoData = <String, String>{
+            'encryptedMessage': e2eeData['encryptedMessage']!.toString(),
+            'iv': e2eeData['iv']!.toString(),
+            'encryptedSessionKey': e2eeData['encryptedSessionKey']!.toString(),
+            'sessionKeyIV': e2eeData['sessionKeyIV']!.toString(),
+            'signature': e2eeData['signature']!.toString(),
+            'recipientPublicKey': e2eeData['recipientPublicKey']!.toString(),
+          };
+
+          return await _e2eeService.decryptMessage(cryptoData);
+        }
+      } else {
+        print('DEBUG: Message is NOT encrypted or missing e2eeData');
+        print('DEBUG: encrypted: ${messageData['encrypted']}');
+        print('DEBUG: e2eeData: ${messageData['e2eeData']}');
+      }
+
+      // Return original message if not encrypted
+      return messageData['message'] ?? '';
+    } catch (e) {
+      print('DEBUG: E2EE decryption failed with error: $e');
+      return messageData['message'] ?? '[Decryption failed]';
+    }
+  }
+
+  /// Get messages stream with E2EE decryption
+  Stream<List<Message>> getMessagesStream(
+      String chatRoomId, bool isGroup) async* {
+    final currentUserId = _auth.currentUser!.uid;
+
+    final messagesQuery = isGroup
+        ? _firestore
+            .collection('groups')
+            .doc(chatRoomId)
+            .collection('messages')
+            .orderBy('timestamp',
+                descending: false) // Changed to ascending for proper display
+        : _firestore
+            .collection('chat_rooms')
+            .doc(chatRoomId)
+            .collection('messages')
+            .orderBy('timestamp',
+                descending: false); // Changed to ascending for proper display
+
+    await for (final snapshot in messagesQuery.snapshots()) {
+      final messages = <Message>[];
+
+      for (final doc in snapshot.docs) {
+        final messageData = doc.data();
+        messageData['id'] = doc.id;
+
+        // Decrypt message if needed
+        final decryptedMessage = await decryptMessageIfNeeded(messageData);
+        messageData['message'] = decryptedMessage;
+
+        messages.add(Message.fromMap(messageData, doc.id));
+      }
+
+      yield messages;
+    }
   }
 
   Future<void> updateTypingStatus(
@@ -550,6 +799,23 @@ class ChatService {
       'members': FieldValue.arrayUnion(memberIds),
     });
 
+    // E2EE: Add new members to group E2EE if enabled
+    try {
+      final isGroupE2EEEnabled = await _e2eeService.isGroupE2EEEnabled(groupId);
+      if (isGroupE2EEEnabled) {
+        for (final member in newMembers) {
+          try {
+            await _e2eeService.addMemberToGroupE2EE(groupId, member.uid);
+          } catch (e) {
+            print(
+                'Warning: Could not add member ${member.uid} to group E2EE: $e');
+          }
+        }
+      }
+    } catch (e) {
+      print('Warning: Group E2EE member addition failed: $e');
+    }
+
     // Send a system message for each new member
     for (var member in newMembers) {
       await _sendSystemMessage(
@@ -569,6 +835,18 @@ class ChatService {
         memberToRemove.uid,
       ]), // Also remove from admin list if they are one
     });
+
+    // E2EE: Remove member from group E2EE if enabled
+    try {
+      final isGroupE2EEEnabled = await _e2eeService.isGroupE2EEEnabled(groupId);
+      if (isGroupE2EEEnabled) {
+        await _e2eeService.removeMemberFromGroupE2EE(
+            groupId, memberToRemove.uid);
+      }
+    } catch (e) {
+      print('Warning: Group E2EE member removal failed: $e');
+    }
+
     await _sendSystemMessage(
       groupId,
       "${memberToRemove.email.split('@')[0]} was removed.",
@@ -730,9 +1008,8 @@ class ChatService {
     final currentUser = _auth.currentUser!;
     final newGroupRef = _firestore.collection('groups').doc();
 
-    List<String> memberIds = selectedContacts
-        .map((contact) => contact.uid)
-        .toList();
+    List<String> memberIds =
+        selectedContacts.map((contact) => contact.uid).toList();
     memberIds.add(currentUser.uid);
     List<String> adminIds = [currentUser.uid];
 
@@ -744,10 +1021,30 @@ class ChatService {
       'members': memberIds,
       'lastMessage': 'Group created.',
       'lastMessageTimestamp': Timestamp.now(),
-
       'description': 'A new chat group!',
       'admins': adminIds,
     });
+
+    // E2EE: Initialize group E2EE if all members have E2EE enabled
+    try {
+      bool allMembersHaveE2EE = true;
+      for (final memberId in memberIds) {
+        final hasE2EE = await _e2eeService.getUserE2EEStatus(memberId);
+        if (!hasE2EE) {
+          allMembersHaveE2EE = false;
+          break;
+        }
+      }
+
+      if (allMembersHaveE2EE) {
+        await _e2eeService.initializeGroupE2EE(newGroupRef.id, memberIds);
+        print('Group E2EE initialized for new group: ${newGroupRef.id}');
+      } else {
+        print('Not all members have E2EE enabled - group E2EE not initialized');
+      }
+    } catch (e) {
+      print('Warning: Failed to initialize group E2EE: $e');
+    }
   }
 
   Stream<List<GroupProfile>> getGroupsStream() {
@@ -758,10 +1055,10 @@ class ChatService {
         .where('members', arrayContains: currentUser.uid)
         .snapshots()
         .map((snapshot) {
-          return snapshot.docs
-              .map((doc) => GroupProfile.fromMap(doc.data()))
-              .toList();
-        });
+      return snapshot.docs
+          .map((doc) => GroupProfile.fromMap(doc.data()))
+          .toList();
+    });
   }
 
   Future<void> sendGroupMessage({
@@ -775,11 +1072,74 @@ class ChatService {
     final String currentUserEmail = _auth.currentUser!.email!;
     final Timestamp timestamp = Timestamp.now();
 
+    // E2EE: Encrypt text message for group chats
+    String? encryptedText = text;
+    Map<String, dynamic>? e2eeData;
+
+    if (text != null) {
+      try {
+        // Check if group E2EE is enabled
+        final groupE2EEEnabled = await _e2eeService.isGroupE2EEEnabled(groupId);
+
+        if (groupE2EEEnabled) {
+          // Try to encrypt the message
+          try {
+            e2eeData = await _e2eeService.encryptGroupMessage(text, groupId);
+            encryptedText = '[ENCRYPTED]'; // Placeholder for encrypted content
+            print('Group E2EE encryption successful');
+          } catch (encryptError) {
+            print('Group E2EE encryption failed: $encryptError');
+            // Continue with unencrypted message if encryption fails
+            encryptedText = text; // Use original text
+            e2eeData = null;
+          }
+        } else {
+          // Try to auto-enable E2EE for the group if not enabled
+          try {
+            print('Auto-enabling E2EE for group...');
+            // Get group members
+            final groupDoc =
+                await _firestore.collection('groups').doc(groupId).get();
+            final groupData = groupDoc.data();
+            if (groupData != null) {
+              final memberIds = List<String>.from(groupData['members'] ?? []);
+              await _e2eeService.initializeGroupE2EE(groupId, memberIds);
+              print('Group E2EE auto-enabled');
+
+              // Now try encryption again
+              try {
+                e2eeData =
+                    await _e2eeService.encryptGroupMessage(text, groupId);
+                encryptedText = '[ENCRYPTED]';
+                print('Group E2EE encryption successful after auto-enable');
+              } catch (encryptError) {
+                print(
+                    'Group E2EE encryption failed after auto-enable: $encryptError');
+                encryptedText = text;
+                e2eeData = null;
+              }
+            } else {
+              print('Group data not found - sending unencrypted');
+              encryptedText = text;
+            }
+          } catch (autoEnableError) {
+            print('Failed to auto-enable group E2EE: $autoEnableError');
+            encryptedText = text;
+          }
+        }
+      } catch (e) {
+        print('Group E2EE check failed: $e - sending unencrypted message');
+        // Continue with unencrypted message if E2EE check fails
+        encryptedText = text; // Use original text
+        e2eeData = null;
+      }
+    }
+
     Message newMessage = Message(
       senderId: currentUserId,
       senderEmail: currentUserEmail,
       receiverId: groupId,
-      message: text ?? '',
+      message: encryptedText ?? '',
       imageUrl: imageUrl,
       type: imageUrl != null ? 'image' : 'text',
       timestamp: timestamp,
@@ -788,11 +1148,18 @@ class ChatService {
       readBy: {},
     );
 
+    // Add E2EE data to message if available
+    final messageData = newMessage.toMap();
+    if (e2eeData != null) {
+      messageData['e2eeData'] = e2eeData;
+      messageData['encrypted'] = true;
+    }
+
     await _firestore
         .collection('groups')
         .doc(groupId)
         .collection('messages')
-        .add(newMessage.toMap());
+        .add(messageData);
 
     await _firestore.collection('groups').doc(groupId).update({
       'lastMessage': text ?? "Sent an image",
@@ -807,5 +1174,32 @@ class ChatService {
         .collection('messages')
         .orderBy('timestamp', descending: false)
         .snapshots();
+  }
+
+  /// Get group messages stream with E2EE decryption
+  Stream<List<Message>> getGroupMessagesStreamWithDecryption(
+      String groupId) async* {
+    final messagesQuery = _firestore
+        .collection('groups')
+        .doc(groupId)
+        .collection('messages')
+        .orderBy('timestamp', descending: false);
+
+    await for (final snapshot in messagesQuery.snapshots()) {
+      final messages = <Message>[];
+
+      for (final doc in snapshot.docs) {
+        final messageData = doc.data();
+        messageData['id'] = doc.id;
+
+        // Decrypt message if needed
+        final decryptedMessage = await decryptMessageIfNeeded(messageData);
+        messageData['message'] = decryptedMessage;
+
+        messages.add(Message.fromMap(messageData, doc.id));
+      }
+
+      yield messages;
+    }
   }
 }

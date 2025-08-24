@@ -1,9 +1,9 @@
-import 'package:dynamichatapp/screens/phone_auth_screen.dart';
-import 'package:dynamichatapp/screens/signup_screen.dart';
+import 'package:dynamichatapp/features/auth/phone_auth_screen.dart';
+import 'package:dynamichatapp/features/auth/signup_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:page_transition/page_transition.dart';
-import '../services/auth_service.dart';
-import '../widgets/custom_textfield.dart';
+import '../../shared/services/auth_service.dart';
+import '../../shared/widgets/custom_textfield.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});

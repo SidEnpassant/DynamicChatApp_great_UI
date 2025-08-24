@@ -1,9 +1,9 @@
-import 'package:dynamichatapp/screens/home_screen.dart';
+import 'package:dynamichatapp/features/chat/home_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:page_transition/page_transition.dart';
 import 'package:pinput/pinput.dart';
-import '../services/auth_service.dart';
+import '../../shared/services/auth_service.dart';
 
 class OtpScreen extends StatefulWidget {
   final String verificationId;

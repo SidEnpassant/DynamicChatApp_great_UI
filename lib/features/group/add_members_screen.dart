@@ -1,6 +1,6 @@
-import 'package:dynamichatapp/models/group_profile.dart';
-import 'package:dynamichatapp/models/user_profile.dart';
-import 'package:dynamichatapp/services/chat_service.dart';
+import 'package:dynamichatapp/shared/models/group_profile.dart';
+import 'package:dynamichatapp/shared/models/user_profile.dart';
+import 'package:dynamichatapp/shared/services/chat_service.dart';
 import 'package:flutter/material.dart';
 
 class AddMembersScreen extends StatefulWidget {

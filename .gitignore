@@ -48,3 +48,7 @@ android/app/google-services.json
 firebase.json
 lib/OneSignalAppCredentials.dart
 pubspec.lock
+firestore.rules
+lib/core/config/OneSignalAppCredentials.dart
+lib/core/config/firebase_options.dart
+firestore_rules_updated.rules

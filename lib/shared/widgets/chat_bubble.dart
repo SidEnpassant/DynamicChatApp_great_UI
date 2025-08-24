@@ -1,5 +1,5 @@
-import 'package:dynamichatapp/models/message.dart';
-import 'package:dynamichatapp/widgets/audio_player_bubble.dart';
+import 'package:dynamichatapp/shared/models/message.dart';
+import 'package:dynamichatapp/shared/widgets/audio_player_bubble.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';

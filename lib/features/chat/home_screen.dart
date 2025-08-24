@@ -1,17 +1,17 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:dynamichatapp/models/group_profile.dart';
-import 'package:dynamichatapp/screens/add_contact_screen.dart';
-import 'package:dynamichatapp/screens/create_group_screen.dart';
-import 'package:dynamichatapp/services/presence_service.dart';
+import 'package:dynamichatapp/shared/models/group_profile.dart';
+import 'package:dynamichatapp/features/chat/add_contact_screen.dart';
+import 'package:dynamichatapp/features/group/create_group_screen.dart';
+import 'package:dynamichatapp/shared/services/presence_service.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:page_transition/page_transition.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import '../services/auth_service.dart';
-import '../services/chat_service.dart';
-import '../screens/chat_screen.dart';
-import '../screens/profile_screen.dart';
-import '../models/user_profile.dart';
+import '../../shared/services/auth_service.dart';
+import '../../shared/services/chat_service.dart';
+import 'chat_screen.dart';
+import '../profile/profile_screen.dart';
+import '../../shared/models/user_profile.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});

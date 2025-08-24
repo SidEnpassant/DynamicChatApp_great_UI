@@ -1,10 +1,10 @@
 import 'package:country_picker/country_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import '../models/user_profile.dart';
-import '../services/chat_service.dart';
-import '../widgets/custom_textfield.dart';
-import '../services/auth_service.dart';
+import '../../shared/models/user_profile.dart';
+import '../../shared/services/chat_service.dart';
+import '../../shared/widgets/custom_textfield.dart';
+import '../../shared/services/auth_service.dart';
 
 class AddContactScreen extends StatefulWidget {
   const AddContactScreen({super.key});

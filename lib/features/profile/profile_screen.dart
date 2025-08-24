@@ -3,8 +3,10 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../services/storage_service.dart';
-import '../services/auth_service.dart';
+import '../../shared/services/storage_service.dart';
+import '../../shared/services/auth_service.dart';
+import 'e2ee_settings_screen.dart';
+import '../testing/e2ee_test_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -205,7 +207,6 @@ class _ProfileScreenState extends State<ProfileScreen>
               ),
             ),
           ),
-
           SliverToBoxAdapter(
             child: FadeTransition(
               opacity: _fadeAnimation,
@@ -271,7 +272,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                                         : null,
                                   ),
                                 ),
-
                                 Positioned(
                                   bottom: 0,
                                   right: 0,
@@ -311,9 +311,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                                                   height: 24,
                                                   child:
                                                       CircularProgressIndicator(
-                                                        strokeWidth: 2,
-                                                        color: Colors.white,
-                                                      ),
+                                                    strokeWidth: 2,
+                                                    color: Colors.white,
+                                                  ),
                                                 )
                                               : const Icon(
                                                   Icons.camera_alt,
@@ -327,9 +327,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                 ),
                               ],
                             ),
-
                             const SizedBox(height: 24),
-
                             Container(
                               padding: const EdgeInsets.all(20),
                               decoration: BoxDecoration(
@@ -376,9 +374,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                           ],
                         ),
                       ),
-
                       const SizedBox(height: 24),
-
                       Container(
                         decoration: BoxDecoration(
                           color: Colors.white,
@@ -408,6 +404,37 @@ class _ProfileScreenState extends State<ProfileScreen>
                             ),
                             _buildDivider(),
                             _buildProfileOption(
+                              icon: Icons.security,
+                              title: 'End-to-End Encryption',
+                              subtitle:
+                                  'Manage your encryption keys and security',
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        const E2EESettingsScreen(),
+                                  ),
+                                );
+                              },
+                            ),
+                            _buildDivider(),
+                            _buildProfileOption(
+                              icon: Icons.bug_report,
+                              title: 'E2EE Test Screen',
+                              subtitle: 'Test E2EE functionality (Development)',
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        const E2EETestScreen(),
+                                  ),
+                                );
+                              },
+                            ),
+                            _buildDivider(),
+                            _buildProfileOption(
                               icon: Icons.help_outline,
                               title: 'Help & Support',
                               subtitle: 'Get help and contact support',
@@ -416,7 +443,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                           ],
                         ),
                       ),
-
                       const SizedBox(height: 40),
                     ],
                   ),

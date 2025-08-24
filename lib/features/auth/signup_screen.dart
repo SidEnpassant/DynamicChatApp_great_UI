@@ -1,10 +1,10 @@
-// lib/screens/signup_screen.dart
+// lib/features/auth/signup_screen.dart
 import 'package:country_picker/country_picker.dart';
-import 'package:dynamichatapp/screens/otp_screen.dart';
+import 'package:dynamichatapp/features/auth/otp_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:page_transition/page_transition.dart';
-import '../widgets/custom_textfield.dart';
+import '../../shared/widgets/custom_textfield.dart';
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});

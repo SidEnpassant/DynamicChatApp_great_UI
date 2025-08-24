@@ -1,9 +1,9 @@
 import 'package:country_picker/country_picker.dart';
-import 'package:dynamichatapp/screens/otp_screen.dart';
+import 'package:dynamichatapp/features/auth/otp_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:page_transition/page_transition.dart';
-import '../services/auth_service.dart';
-import '../widgets/custom_textfield.dart';
+import '../../shared/services/auth_service.dart';
+import '../../shared/widgets/custom_textfield.dart';
 
 class PhoneAuthScreen extends StatefulWidget {
   const PhoneAuthScreen({super.key});

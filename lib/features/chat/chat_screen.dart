@@ -1,8 +1,8 @@
 import 'dart:async';
-import 'package:dynamichatapp/models/group_profile.dart';
-import 'package:dynamichatapp/models/message.dart';
-import 'package:dynamichatapp/screens/group_info_screen.dart';
-import 'package:dynamichatapp/services/storage_service.dart';
+import 'package:dynamichatapp/shared/models/group_profile.dart';
+import 'package:dynamichatapp/shared/models/message.dart';
+import 'package:dynamichatapp/features/group/group_info_screen.dart';
+import 'package:dynamichatapp/shared/services/storage_service.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -10,10 +10,10 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import 'package:flutter_typeahead/flutter_typeahead.dart';
-import '../services/auth_service.dart';
-import '../services/chat_service.dart';
-import '../models/user_profile.dart';
-import '../widgets/chat_bubble.dart';
+import '../../shared/services/auth_service.dart';
+import '../../shared/services/chat_service.dart';
+import '../../shared/models/user_profile.dart';
+import '../../shared/widgets/chat_bubble.dart';
 
 class ChatScreen extends StatefulWidget {
   final UserProfile? receiver;
@@ -132,12 +132,27 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     }
   }
 
-  void _markVisibleMessagesAsRead(List<QueryDocumentSnapshot> messages) {
-    for (var doc in messages) {
-      final message = Message.fromMap(
-        doc.data() as Map<String, dynamic>,
-        doc.id,
-      );
+  void _markVisibleMessagesAsRead(List<dynamic> messages) {
+    for (var messageOrDoc in messages) {
+      Message message;
+      String messageId;
+
+      if (messageOrDoc is QueryDocumentSnapshot) {
+        // Handle QueryDocumentSnapshot (old group chat method)
+        final doc = messageOrDoc;
+        message = Message.fromMap(
+          doc.data() as Map<String, dynamic>,
+          doc.id,
+        );
+        messageId = doc.id;
+      } else if (messageOrDoc is Message) {
+        // Handle Message object (new decryption-enabled method)
+        message = messageOrDoc;
+        messageId = message.id ?? '';
+      } else {
+        continue; // Skip unknown types
+      }
+
       final isReadByCurrentUser = message.readBy.containsKey(
         _authService.getCurrentUser()!.uid,
       );
@@ -145,10 +160,23 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       if (message.senderId != _authService.getCurrentUser()!.uid &&
           !isReadByCurrentUser) {
         if (widget.isGroupChat) {
-          _chatService.markGroupMessageAsRead(_chatEntityId, doc.id);
+          _chatService.markGroupMessageAsRead(_chatEntityId, messageId);
         } else {
-          _chatService.markPersonalMessageAsRead(_chatEntityId, doc.id);
+          _chatService.markPersonalMessageAsRead(_chatEntityId, messageId);
         }
+      }
+    }
+  }
+
+  void _markPersonalMessagesAsRead(List<Message> messages) {
+    for (final message in messages) {
+      final isReadByCurrentUser = message.readBy.containsKey(
+        _authService.getCurrentUser()!.uid,
+      );
+
+      if (message.senderId != _authService.getCurrentUser()!.uid &&
+          !isReadByCurrentUser) {
+        _chatService.markPersonalMessageAsRead(_chatEntityId, message.id ?? '');
       }
     }
   }
@@ -158,13 +186,11 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
     if (messageText.isEmpty) return;
 
-    final List<String> mentionedUserIds = _mentionedUsers
-        .map((user) => user.uid)
-        .toList();
+    final List<String> mentionedUserIds =
+        _mentionedUsers.map((user) => user.uid).toList();
 
-    final receiverId = widget.isGroupChat
-        ? widget.group!.groupId
-        : widget.receiver!.uid;
+    final receiverId =
+        widget.isGroupChat ? widget.group!.groupId : widget.receiver!.uid;
 
     print('DEBUG: messageText = "$messageText"');
     print('DEBUG: mentionedUserIds = $mentionedUserIds');
@@ -195,9 +221,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         _chatEntityId,
       );
       if (imageUrl != null) {
-        final receiverId = widget.isGroupChat
-            ? widget.group!.groupId
-            : widget.receiver!.uid;
+        final receiverId =
+            widget.isGroupChat ? widget.group!.groupId : widget.receiver!.uid;
         await _chatService.sendMessage(
           receiverId,
           isGroup: widget.isGroupChat,
@@ -246,8 +271,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                   Text(
                     'Read By',
                     style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                          fontWeight: FontWeight.bold,
+                        ),
                   ),
                   const Divider(height: 24),
                   Expanded(
@@ -316,9 +341,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
     final isAdmin = group.admins.contains(_authService.getCurrentUser()!.uid);
     final pinnedData = group.pinnedMessage!;
-    final messageText = pinnedData['type'] == 'image'
-        ? '📷 Image'
-        : pinnedData['message'];
+    final messageText =
+        pinnedData['type'] == 'image' ? '📷 Image' : pinnedData['message'];
 
     return Material(
       color: Theme.of(context).primaryColor.withOpacity(0.05),
@@ -372,7 +396,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         message.senderId == _authService.getCurrentUser()!.uid;
     final bool isAdmin =
         widget.group?.admins.contains(_authService.getCurrentUser()!.uid) ??
-        false;
+            false;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -419,7 +443,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                   _chatService.pinMessage(widget.group!, message);
                 },
               ),
-
             if (isCurrentUser) const Divider(height: 24),
             if (isCurrentUser)
               ListTile(
@@ -590,36 +613,103 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildMessageList() {
-    String senderId = _authService.getCurrentUser()!.uid;
-    return StreamBuilder<QuerySnapshot>(
-      stream: widget.isGroupChat
-          ? _chatService.getGroupMessagesStream(_chatEntityId)
-          : _chatService.getMessages(widget.receiver!.uid, senderId),
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return const Center(child: Text("Something went wrong"));
-        }
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator(strokeWidth: 3));
-        }
-        final currentMessages = snapshot.data!.docs;
+    //String senderId = _authService.getCurrentUser()!.uid;
+    // if (widget.isGroupChat) {
+    //   // Group chat - use QuerySnapshot stream
+    //   return StreamBuilder<QuerySnapshot>(
+    //     stream: _chatService.getGroupMessagesStream(_chatEntityId),
+    //     builder: (context, snapshot) {
+    //       if (snapshot.hasError) {
+    //         return const Center(child: Text("Something went wrong"));
+    //       }
+    //       if (snapshot.connectionState == ConnectionState.waiting) {
+    //         return const Center(
+    //             child: CircularProgressIndicator(strokeWidth: 3));
+    //       }
+    //       final currentMessages = snapshot.data!.docs;
 
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _markVisibleMessagesAsRead(snapshot.data!.docs);
-        });
+    //       WidgetsBinding.instance.addPostFrameCallback((_) {
+    //         _markVisibleMessagesAsRead(snapshot.data!.docs);
+    //       });
 
-        return ScrollablePositionedList.builder(
-          itemScrollController: _itemScrollController,
-          itemPositionsListener: _itemPositionsListener,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          itemCount: snapshot.data!.docs.length,
-          itemBuilder: (context, index) {
-            final doc = snapshot.data!.docs[index];
-            return _buildMessageItem(doc);
-          },
-        );
-      },
-    );
+    //       return ScrollablePositionedList.builder(
+    //         itemScrollController: _itemScrollController,
+    //         itemPositionsListener: _itemPositionsListener,
+    //         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+    //         itemCount: snapshot.data!.docs.length,
+    //         itemBuilder: (context, index) {
+    //           final doc = snapshot.data!.docs[index];
+    //           return _buildMessageItem(doc);
+    //         },
+    //       );
+    //     },
+    //   );
+    // }
+    if (widget.isGroupChat) {
+      // Group chat - use E2EE-decryption-enabled stream
+      return StreamBuilder<List<Message>>(
+        stream:
+            _chatService.getGroupMessagesStreamWithDecryption(_chatEntityId),
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return const Center(child: Text("Something went wrong"));
+          }
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(
+                child: CircularProgressIndicator(strokeWidth: 3));
+          }
+
+          final messages = snapshot.data ?? [];
+
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            // Works with Message objects too
+            _markVisibleMessagesAsRead(messages);
+          });
+
+          return ScrollablePositionedList.builder(
+            itemScrollController: _itemScrollController,
+            itemPositionsListener: _itemPositionsListener,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            itemCount: messages.length,
+            itemBuilder: (context, index) {
+              final message = messages[index];
+              return _buildMessageItemFromMessage(message);
+            },
+          );
+        },
+      );
+    } else {
+      // Individual chat - use List<Message> stream
+      return StreamBuilder<List<Message>>(
+        stream: _chatService.getMessagesStream(_chatEntityId, false),
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return const Center(child: Text("Something went wrong"));
+          }
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(
+                child: CircularProgressIndicator(strokeWidth: 3));
+          }
+          final messages = snapshot.data ?? [];
+
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            // Mark messages as read for personal chats
+            _markPersonalMessagesAsRead(messages);
+          });
+
+          return ScrollablePositionedList.builder(
+            itemScrollController: _itemScrollController,
+            itemPositionsListener: _itemPositionsListener,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            itemCount: messages.length,
+            itemBuilder: (context, index) {
+              final message = messages[index];
+              return _buildMessageItemFromMessage(message);
+            },
+          );
+        },
+      );
+    }
   }
 
   Widget _buildMessageItem(DocumentSnapshot doc) {
@@ -632,9 +722,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     );
     final currentUserId = _authService.getCurrentUser()!.uid;
     bool isCurrentUser = message.senderId == currentUserId;
-    var alignment = isCurrentUser
-        ? Alignment.centerRight
-        : Alignment.centerLeft;
+    var alignment =
+        isCurrentUser ? Alignment.centerRight : Alignment.centerLeft;
     final formattedTime = DateFormat(
       'hh:mm a',
     ).format(message.timestamp.toDate());
@@ -643,9 +732,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       alignment: alignment,
       margin: const EdgeInsets.symmetric(vertical: 4),
       child: Column(
-        crossAxisAlignment: isCurrentUser
-            ? CrossAxisAlignment.end
-            : CrossAxisAlignment.start,
+        crossAxisAlignment:
+            isCurrentUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         children: [
           ChatBubble(
             message: message.message,
@@ -655,6 +743,58 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             reactions: message.reactions,
             currentUserId: currentUserId,
             onLongPress: () => _showReactionsDialog(message, messageId),
+            isReply: message.isReply,
+            replyingToMessage: message.replyingToMessage,
+            replyingToSender: message.replyingToSender,
+            onReply: () => setState(() => _replyingToMessage = message),
+            isGroupChat: widget.isGroupChat,
+            senderName: message.senderName,
+            senderPhotoURL: message.senderPhotoURL,
+            isHighlighted: message.id == _highlightedMessageId,
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: 4.0, right: 8.0, left: 8.0),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  formattedTime,
+                  style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                ),
+                if (isCurrentUser) const SizedBox(width: 4),
+                if (isCurrentUser) _buildReadReceipt(message),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMessageItemFromMessage(Message message) {
+    final currentUserId = _authService.getCurrentUser()!.uid;
+    bool isCurrentUser = message.senderId == currentUserId;
+    var alignment =
+        isCurrentUser ? Alignment.centerRight : Alignment.centerLeft;
+    final formattedTime = DateFormat(
+      'hh:mm a',
+    ).format(message.timestamp.toDate());
+
+    return Container(
+      alignment: alignment,
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      child: Column(
+        crossAxisAlignment:
+            isCurrentUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        children: [
+          ChatBubble(
+            message: message.message,
+            isCurrentUser: isCurrentUser,
+            imageUrl: message.imageUrl,
+            type: message.type,
+            reactions: message.reactions,
+            currentUserId: currentUserId,
+            onLongPress: () => _showReactionsDialog(message, message.id ?? ''),
             isReply: message.isReply,
             replyingToMessage: message.replyingToMessage,
             replyingToSender: message.replyingToSender,
@@ -991,8 +1131,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     final atIndex = beforeCursor.lastIndexOf('@');
 
     if (atIndex != -1) {
-      final newText =
-          currentText.substring(0, atIndex) +
+      final newText = currentText.substring(0, atIndex) +
           '@${user.email.split('@')[0]} ' +
           currentText.substring(cursorPosition);
 

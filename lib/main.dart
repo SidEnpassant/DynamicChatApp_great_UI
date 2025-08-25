@@ -17,10 +17,7 @@ void main() async {
 
   initOneSignal();
 
-  // Initialize E2EE service
   final e2eeService = E2EEService();
-  // Note: E2EE will be initialized when user logs in, not at app startup
-  // This is because we need an authenticated user to generate keys
 
   runApp(const MyApp());
 }

@@ -138,7 +138,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       String messageId;
 
       if (messageOrDoc is QueryDocumentSnapshot) {
-        // Handle QueryDocumentSnapshot (old group chat method)
         final doc = messageOrDoc;
         message = Message.fromMap(
           doc.data() as Map<String, dynamic>,
@@ -146,11 +145,10 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         );
         messageId = doc.id;
       } else if (messageOrDoc is Message) {
-        // Handle Message object (new decryption-enabled method)
         message = messageOrDoc;
         messageId = message.id ?? '';
       } else {
-        continue; // Skip unknown types
+        continue;
       }
 
       final isReadByCurrentUser = message.readBy.containsKey(
@@ -613,40 +611,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildMessageList() {
-    //String senderId = _authService.getCurrentUser()!.uid;
-    // if (widget.isGroupChat) {
-    //   // Group chat - use QuerySnapshot stream
-    //   return StreamBuilder<QuerySnapshot>(
-    //     stream: _chatService.getGroupMessagesStream(_chatEntityId),
-    //     builder: (context, snapshot) {
-    //       if (snapshot.hasError) {
-    //         return const Center(child: Text("Something went wrong"));
-    //       }
-    //       if (snapshot.connectionState == ConnectionState.waiting) {
-    //         return const Center(
-    //             child: CircularProgressIndicator(strokeWidth: 3));
-    //       }
-    //       final currentMessages = snapshot.data!.docs;
-
-    //       WidgetsBinding.instance.addPostFrameCallback((_) {
-    //         _markVisibleMessagesAsRead(snapshot.data!.docs);
-    //       });
-
-    //       return ScrollablePositionedList.builder(
-    //         itemScrollController: _itemScrollController,
-    //         itemPositionsListener: _itemPositionsListener,
-    //         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-    //         itemCount: snapshot.data!.docs.length,
-    //         itemBuilder: (context, index) {
-    //           final doc = snapshot.data!.docs[index];
-    //           return _buildMessageItem(doc);
-    //         },
-    //       );
-    //     },
-    //   );
-    // }
     if (widget.isGroupChat) {
-      // Group chat - use E2EE-decryption-enabled stream
       return StreamBuilder<List<Message>>(
         stream:
             _chatService.getGroupMessagesStreamWithDecryption(_chatEntityId),
@@ -662,7 +627,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           final messages = snapshot.data ?? [];
 
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            // Works with Message objects too
             _markVisibleMessagesAsRead(messages);
           });
 
@@ -679,7 +643,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         },
       );
     } else {
-      // Individual chat - use List<Message> stream
       return StreamBuilder<List<Message>>(
         stream: _chatService.getMessagesStream(_chatEntityId, false),
         builder: (context, snapshot) {
@@ -693,7 +656,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           final messages = snapshot.data ?? [];
 
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            // Mark messages as read for personal chats
             _markPersonalMessagesAsRead(messages);
           });
 

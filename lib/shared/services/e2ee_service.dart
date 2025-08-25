@@ -4,7 +4,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/utils/crypto_utils.dart';
 
-/// E2EE Service for managing end-to-end encryption
 class E2EEService {
   static final E2EEService _instance = E2EEService._internal();
   factory E2EEService() => _instance;
@@ -13,13 +12,11 @@ class E2EEService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  // Key storage constants
   static const String _privateKeyKey = 'e2ee_private_key';
   static const String _publicKeyKey = 'e2ee_public_key';
   static const String _fingerprintKey = 'e2ee_fingerprint';
   static const String _deviceIdKey = 'e2ee_device_id';
 
-  /// Initialize E2EE for the current user
   Future<void> initializeE2EE() async {
     try {
       final user = _auth.currentUser;
@@ -27,27 +24,21 @@ class E2EEService {
 
       final prefs = await SharedPreferences.getInstance();
 
-      // Check if keys already exist
       final existingPrivateKey = prefs.getString(_privateKeyKey);
       if (existingPrivateKey != null) {
-        // Keys already exist, verify they're stored in Firestore
         await _ensureKeysInFirestore();
         return;
       }
 
-      // Generate new key pair
       final keyPair = CryptoUtils.generateKeyPair();
 
-      // Store keys in SharedPreferences (in production, use secure storage)
       await prefs.setString(_privateKeyKey, keyPair['privateKey']!);
       await prefs.setString(_publicKeyKey, keyPair['publicKey']!);
       await prefs.setString(_fingerprintKey, keyPair['fingerprint']!);
 
-      // Generate device ID
       final deviceId = CryptoUtils.generateSecureRandomString(16);
       await prefs.setString(_deviceIdKey, deviceId);
 
-      // Store public key in Firestore
       await _firestore
           .collection('users')
           .doc(user.uid)
@@ -61,7 +52,6 @@ class E2EEService {
         'lastUsed': FieldValue.serverTimestamp(),
       });
 
-      // Update user document with E2EE status
       await _firestore.collection('users').doc(user.uid).update({
         'e2eeEnabled': true,
         'e2eeFingerprint': keyPair['fingerprint'],
@@ -72,7 +62,6 @@ class E2EEService {
     }
   }
 
-  /// Ensure keys are stored in Firestore
   Future<void> _ensureKeysInFirestore() async {
     final user = _auth.currentUser;
     if (user == null) throw Exception('User not authenticated');
@@ -86,7 +75,6 @@ class E2EEService {
       throw Exception('E2EE keys not found on device');
     }
 
-    // Check if keys exist in Firestore
     final keyDoc = await _firestore
         .collection('users')
         .doc(user.uid)
@@ -95,7 +83,6 @@ class E2EEService {
         .get();
 
     if (!keyDoc.exists) {
-      // Store keys in Firestore
       await _firestore
           .collection('users')
           .doc(user.uid)
@@ -111,30 +98,25 @@ class E2EEService {
     }
   }
 
-  /// Get current user's public key
   Future<String?> getCurrentUserPublicKey() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(_publicKeyKey);
   }
 
-  /// Get current user's private key
   Future<String?> getCurrentUserPrivateKey() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(_privateKeyKey);
   }
 
-  /// Get current user's fingerprint
   Future<String?> getCurrentUserFingerprint() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(_fingerprintKey);
   }
 
-  /// Get current user ID
   String? getCurrentUserId() {
     return _auth.currentUser?.uid;
   }
 
-  /// Get recipient's public key from Firestore
   Future<String?> getRecipientPublicKey(String recipientUid) async {
     try {
       final keysSnapshot = await _firestore
@@ -155,22 +137,17 @@ class E2EEService {
     }
   }
 
-  /// Encrypt message for a specific recipient
   Future<Map<String, dynamic>> encryptMessage(
       String message, String recipientUid) async {
     try {
-      // Get recipient's public key
       final recipientPublicKey = await getRecipientPublicKey(recipientUid);
       if (recipientPublicKey == null) {
         throw Exception(
             'Recipient public key not found - recipient may not have E2EE enabled');
       }
-
-      // Encrypt the message
       final encryptedData =
           CryptoUtils.encryptMessage(message, recipientPublicKey);
 
-      // Get current user's fingerprint for verification
       final senderFingerprint = await getCurrentUserFingerprint();
 
       return {
@@ -184,7 +161,6 @@ class E2EEService {
     }
   }
 
-  /// Decrypt message using current user's private key
   Future<String> decryptMessage(Map<String, dynamic> encryptedData) async {
     try {
       final privateKey = await getCurrentUserPrivateKey();
@@ -192,7 +168,6 @@ class E2EEService {
         throw Exception('Private key not found');
       }
 
-      // Convert the encrypted data to the format expected by CryptoUtils
       final cryptoData = <String, String>{
         'encryptedMessage': encryptedData['encryptedMessage'] as String,
         'iv': encryptedData['iv'] as String,
@@ -209,7 +184,6 @@ class E2EEService {
     }
   }
 
-  /// Verify message sender's fingerprint
   Future<bool> verifyMessageSender(
       String senderFingerprint, String senderUid) async {
     try {
@@ -226,7 +200,6 @@ class E2EEService {
     }
   }
 
-  /// Get all devices for a user
   Future<List<Map<String, dynamic>>> getUserDevices(String userUid) async {
     try {
       final devicesSnapshot = await _firestore
@@ -241,7 +214,6 @@ class E2EEService {
     }
   }
 
-  /// Revoke a device's keys
   Future<void> revokeDevice(String deviceId) async {
     try {
       final user = _auth.currentUser;
@@ -249,7 +221,6 @@ class E2EEService {
 
       final prefs = await SharedPreferences.getInstance();
 
-      // Remove from Firestore
       await _firestore
           .collection('users')
           .doc(user.uid)
@@ -257,7 +228,6 @@ class E2EEService {
           .doc(deviceId)
           .delete();
 
-      // If this is the current device, clear local keys
       final currentDeviceId = prefs.getString(_deviceIdKey);
       if (deviceId == currentDeviceId) {
         await prefs.remove(_privateKeyKey);
@@ -270,7 +240,6 @@ class E2EEService {
     }
   }
 
-  /// Check if E2EE is enabled for current user
   Future<bool> isE2EEEnabled() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -281,7 +250,6 @@ class E2EEService {
     }
   }
 
-  /// Get E2EE status for a user
   Future<bool> getUserE2EEStatus(String userUid) async {
     try {
       final userDoc = await _firestore.collection('users').doc(userUid).get();
@@ -291,7 +259,6 @@ class E2EEService {
     }
   }
 
-  /// Update last used timestamp for current device
   Future<void> updateLastUsed() async {
     try {
       final user = _auth.currentUser;
@@ -309,12 +276,9 @@ class E2EEService {
           .update({
         'lastUsed': FieldValue.serverTimestamp(),
       });
-    } catch (e) {
-      // Silently fail for last used updates
-    }
+    } catch (e) {}
   }
 
-  /// Export keys for backup (encrypted)
   Future<String> exportKeys(String backupPassword) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -353,7 +317,6 @@ class E2EEService {
     }
   }
 
-  /// Import keys from backup
   Future<void> importKeys(String backupData, String backupPassword) async {
     try {
       final backup = json.decode(backupData);
@@ -367,46 +330,35 @@ class E2EEService {
       final keysData = json.decode(decryptedKeys);
       final prefs = await SharedPreferences.getInstance();
 
-      // Store imported keys
       await prefs.setString(_privateKeyKey, keysData['privateKey']);
       await prefs.setString(_publicKeyKey, keysData['publicKey']);
       await prefs.setString(_fingerprintKey, keysData['fingerprint']);
       await prefs.setString(_deviceIdKey, keysData['deviceId']);
 
-      // Ensure keys are in Firestore
       await _ensureKeysInFirestore();
     } catch (e) {
       throw Exception('Failed to import keys: $e');
     }
   }
 
-  // ============================================================
-  // =============== GROUP CHAT E2EE FEATURES ===================
-  // ============================================================
-
-  /// Initialize E2EE for a group chat
   Future<void> initializeGroupE2EE(
       String groupId, List<String> memberIds) async {
     try {
       final user = _auth.currentUser;
       if (user == null) throw Exception('User not authenticated');
 
-      // Check if user is a member of the group
       if (!memberIds.contains(user.uid)) {
         throw Exception('User is not a member of this group');
       }
 
-      // Generate a group encryption key
       final groupKey = CryptoUtils.generateSecureRandomString(32);
 
-      // Encrypt the group key for each member using their public keys
       final encryptedGroupKeys = <String, Map<String, dynamic>>{};
 
       for (final memberId in memberIds) {
         try {
           final memberPublicKey = await getRecipientPublicKey(memberId);
           if (memberPublicKey != null) {
-            // Encrypt group key with member's public key
             final encryptedGroupKey =
                 CryptoUtils.encryptAES(groupKey, memberPublicKey);
             encryptedGroupKeys[memberId] = {
@@ -420,7 +372,6 @@ class E2EEService {
         }
       }
 
-      // Store group E2EE data in Firestore
       await _firestore
           .collection('groups')
           .doc(groupId)
@@ -435,7 +386,6 @@ class E2EEService {
         'createdBy': user.uid,
       });
 
-      // Update group document with E2EE status
       await _firestore.collection('groups').doc(groupId).update({
         'e2eeEnabled': true,
         'e2eeGroupKeyId': 'group_key',
@@ -448,7 +398,6 @@ class E2EEService {
     }
   }
 
-  /// Check if E2EE is enabled for a group
   Future<bool> isGroupE2EEEnabled(String groupId) async {
     try {
       final groupDoc = await _firestore.collection('groups').doc(groupId).get();
@@ -458,7 +407,6 @@ class E2EEService {
     }
   }
 
-  /// Get group encryption key for current user
   Future<String?> getGroupEncryptionKey(String groupId) async {
     try {
       print('DEBUG: getGroupEncryptionKey called for group: $groupId');
@@ -470,7 +418,6 @@ class E2EEService {
       }
       print('DEBUG: Current user ID: ${user.uid}');
 
-      // Get group E2EE data
       print('DEBUG: Fetching group E2EE data from Firestore...');
       final e2eeDoc = await _firestore
           .collection('groups')
@@ -493,7 +440,6 @@ class E2EEService {
       print(
           'DEBUG: encryptedGroupKeys keys: ${encryptedGroupKeys.keys.toList()}');
 
-      // Get current user's encrypted group key
       final userEncryptedKey = encryptedGroupKeys[user.uid];
       if (userEncryptedKey == null) {
         print('DEBUG: User encrypted key not found for user: ${user.uid}');
@@ -501,7 +447,6 @@ class E2EEService {
       }
       print('DEBUG: User encrypted key found');
 
-      // Get current user's public key (since group key was encrypted with it)
       print('DEBUG: Getting current user public key...');
       final publicKey = await getCurrentUserPublicKey();
       if (publicKey == null) {
@@ -510,7 +455,6 @@ class E2EEService {
       }
       print('DEBUG: Current user public key retrieved');
 
-      // Decrypt the group key using user's public key (same key used for encryption)
       print('DEBUG: Decrypting group key with public key...');
       final decryptedGroupKey = CryptoUtils.decryptAES(
         userEncryptedKey['encryptedGroupKey'],
@@ -526,32 +470,26 @@ class E2EEService {
     }
   }
 
-  /// Encrypt message for group chat
   Future<Map<String, dynamic>> encryptGroupMessage(
       String message, String groupId) async {
     try {
-      // Check if group E2EE is enabled
       final isEnabled = await isGroupE2EEEnabled(groupId);
       if (!isEnabled) {
         throw Exception('Group E2EE is not enabled');
       }
 
-      // Get group encryption key
       final groupKey = await getGroupEncryptionKey(groupId);
       if (groupKey == null) {
         throw Exception('Group encryption key not found');
       }
 
-      // Encrypt the message with group key
       final encryptedData = CryptoUtils.encryptAES(message, groupKey);
 
-      // Get current user's fingerprint for verification
       final senderFingerprint = await getCurrentUserFingerprint();
 
       return {
-        'encryptedMessage':
-            encryptedData['encrypted']!, // Add the encrypted message content
-        'iv': encryptedData['iv']!, // Add the IV
+        'encryptedMessage': encryptedData['encrypted']!,
+        'iv': encryptedData['iv']!,
         'senderFingerprint': senderFingerprint,
         'groupId': groupId,
         'encrypted': true,
@@ -562,7 +500,6 @@ class E2EEService {
     }
   }
 
-  /// Decrypt group message
   Future<String> decryptGroupMessage(Map<String, dynamic> encryptedData) async {
     try {
       print('DEBUG: Starting group message decryption');
@@ -571,7 +508,6 @@ class E2EEService {
       final groupId = encryptedData['groupId'] as String;
       print('DEBUG: Group ID: $groupId');
 
-      // Get group encryption key
       print('DEBUG: Attempting to get group encryption key...');
       final groupKey = await getGroupEncryptionKey(groupId);
       if (groupKey == null) {
@@ -580,7 +516,6 @@ class E2EEService {
       }
       print('DEBUG: Group encryption key retrieved successfully');
 
-      // Decrypt the message with group key
       print('DEBUG: Attempting to decrypt message with group key...');
       final decryptedMessage = CryptoUtils.decryptAES(
         encryptedData['encryptedMessage'] as String,
@@ -596,10 +531,8 @@ class E2EEService {
     }
   }
 
-  /// Add new member to group E2EE
   Future<void> addMemberToGroupE2EE(String groupId, String newMemberId) async {
     try {
-      // Get group E2EE data
       final e2eeDoc = await _firestore
           .collection('groups')
           .doc(groupId)
@@ -616,13 +549,11 @@ class E2EEService {
       final encryptedGroupKeys =
           Map<String, dynamic>.from(e2eeData['encryptedGroupKeys']);
 
-      // Get new member's public key
       final newMemberPublicKey = await getRecipientPublicKey(newMemberId);
       if (newMemberPublicKey == null) {
         throw Exception('New member does not have E2EE enabled');
       }
 
-      // Encrypt group key for new member
       final encryptedGroupKey =
           CryptoUtils.encryptAES(groupKey, newMemberPublicKey);
       encryptedGroupKeys[newMemberId] = {
@@ -630,7 +561,6 @@ class E2EEService {
         'iv': encryptedGroupKey['iv']!,
       };
 
-      // Update group E2EE data
       await _firestore
           .collection('groups')
           .doc(groupId)
@@ -647,11 +577,9 @@ class E2EEService {
     }
   }
 
-  /// Remove member from group E2EE
   Future<void> removeMemberFromGroupE2EE(
       String groupId, String memberId) async {
     try {
-      // Get group E2EE data
       final e2eeDoc = await _firestore
           .collection('groups')
           .doc(groupId)
@@ -665,10 +593,8 @@ class E2EEService {
       final encryptedGroupKeys =
           Map<String, dynamic>.from(e2eeData['encryptedGroupKeys']);
 
-      // Remove member's encrypted group key
       encryptedGroupKeys.remove(memberId);
 
-      // Update group E2EE data
       await _firestore
           .collection('groups')
           .doc(groupId)
@@ -685,10 +611,8 @@ class E2EEService {
     }
   }
 
-  /// Rotate group encryption key (for security)
   Future<void> rotateGroupEncryptionKey(String groupId) async {
     try {
-      // Get current group E2EE data
       final e2eeDoc = await _firestore
           .collection('groups')
           .doc(groupId)
@@ -703,10 +627,8 @@ class E2EEService {
       final e2eeData = e2eeDoc.data()!;
       final currentMemberIds = List<String>.from(e2eeData['memberIds']);
 
-      // Generate new group key
       final newGroupKey = CryptoUtils.generateSecureRandomString(32);
 
-      // Re-encrypt for all current members
       final newEncryptedGroupKeys = <String, Map<String, dynamic>>{};
 
       for (final memberId in currentMemberIds) {
@@ -728,7 +650,6 @@ class E2EEService {
         }
       }
 
-      // Update group E2EE data with new key
       await _firestore
           .collection('groups')
           .doc(groupId)
